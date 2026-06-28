@@ -305,6 +305,8 @@ a:hover{text-decoration:underline}
 }
 .tab:hover,.tab.on{background:#000;color:#fff}
 .tab-gap{flex:1}
+.tab.site{background:#1f5f3a;color:#fff;border-color:#000}
+.tab.site:hover{background:#000;color:#fff}
 
 /* â”€â”€ Detail page â”€â”€ */
 .d-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));border-bottom:1px solid #000}
@@ -318,6 +320,25 @@ a:hover{text-decoration:underline}
 .d-val{font-weight:bold}
 .chart-panel{padding:10px}
 .chart-title{font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:.04em;color:#333;margin-bottom:8px}
+
+/* â”€â”€ Comparison / map viz cards â”€â”€ */
+.vrow{display:flex;flex-wrap:wrap}
+.vcard{flex:1;min-width:300px;border-right:1px solid #000;border-bottom:1px solid #000;padding:12px}
+.vcard:last-child{border-right:none}
+.vh2{font-size:11px;font-weight:bold;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;color:#222}
+.vsub{font-size:10px;color:#666;margin-bottom:8px;line-height:1.45}
+.preset{display:inline-block;border:1px solid #000;background:#fff;padding:2px 8px;font-size:10px;margin:0 4px 4px 0;text-decoration:none;color:#000}
+.preset:hover{background:#000;color:#fff;text-decoration:none}
+.preset.on{background:#000;color:#fff}
+.clegend{display:flex;flex-wrap:wrap;gap:10px;margin:8px 0 4px}
+.cl{display:inline-flex;align-items:center;gap:5px;font-size:10px}
+.csw{width:12px;height:12px;border:1px solid #000;display:inline-block;flex:none}
+.ctbl{width:100%;border-collapse:collapse;min-width:auto;font-size:11px}
+.ctbl th{background:#e8e8e8;border-bottom:2px solid #000;padding:3px 6px;text-align:left;font-size:10px;cursor:default}
+.ctbl td{padding:3px 6px;border-bottom:1px solid #ddd}
+.heat{width:100%;border-collapse:collapse;min-width:auto;font-size:11px}
+.heat th{background:#e8e8e8;border-bottom:2px solid #000;padding:3px 6px;font-size:10px;cursor:default}
+.heat td{padding:3px 6px;border-bottom:1px solid #fff;border-right:1px solid #fff}
 svg.sparkline{display:block;width:100%}
 .dl-bar{border-top:1px solid #aaa;background:#e8e8e8;padding:4px 8px;display:flex;gap:14px;flex-wrap:wrap}
 .dl-bar a{font-size:11px;color:#000}
@@ -449,14 +470,22 @@ def _titlebar(title: str, close_href: str = "/") -> str:
     )
 
 
+SITE_URL = "https://visiblehand.xyz"
+
+
 def _tabbar(tabs: list[tuple[str, str]], active: str = "") -> str:
     out = '<div class="tabbar">'
+    has_gap = any(not href for _, href in tabs)
     for i, (label, href) in enumerate(tabs):
         cls = "tab on" if label == active else "tab"
         if href:
             out += f'<a class="{cls}" href="{href}">{label}</a>'
         else:
             out += f'<span class="tab-gap"></span>'
+    # Always pin a link back to the consumer website on the far right.
+    ml = "" if has_gap else ' style="margin-left:auto"'
+    out += (f'<a class="tab site" href="{SITE_URL}" target="_blank" rel="noopener"{ml}>'
+            f'&#x2190;&nbsp;visiblehand.xyz</a>')
     out += "</div>"
     return out
 
@@ -547,6 +576,7 @@ def _build_dashboard(rows: list, history_rows: list | None = None) -> str:
 
     _TABS = [
         ("Browse", "/"), ("Dashboard", "/dashboard"),
+        ("Compare", "/compare"), ("Map", "/map"),
         ("API", "/api"), ("Methodology", "/methodology"),
         ("", ""), ("Exit", "/"),
     ]
@@ -1125,6 +1155,280 @@ def _risk_legend() -> str:
     return f'<div style="margin-top:6px">{items}</div>'
 
 
+# ── Comparison + risk-modeling visualisations ───────────────────────────────
+
+_SERIES_PALETTE = ["#a8322f", "#2f5f8c", "#5d7c4f", "#9a5a1f",
+                   "#6a4a8c", "#1f7c7c", "#8c2f6a", "#444444"]
+_SUB_DIMS = [("economic", "ECON"), ("political", "POL"),
+             ("nlp_sentiment", "NLP"), ("governance", "GOV")]
+
+
+def _svg_radar_multi(axes_labels: list[str], series: list[tuple], size: int = 340) -> str:
+    """Overlaid spider chart. series = [(name, [frac0..1 per axis], color)]."""
+    import math
+    cx, cy, R = size / 2, size / 2, size * 0.32
+    n = max(1, len(axes_labels))
+    ang = lambda i: -math.pi / 2 + 2 * math.pi * i / n
+    rings = ""
+    for rr in (0.25, 0.5, 0.75, 1.0):
+        pts = " ".join(f"{cx+math.cos(ang(i))*R*rr:.1f},{cy+math.sin(ang(i))*R*rr:.1f}"
+                       for i in range(n))
+        rings += f'<polygon points="{pts}" fill="none" stroke="#d6d6d2" stroke-width="0.7"/>'
+    axesel = labels = ""
+    for i, lab in enumerate(axes_labels):
+        a = ang(i)
+        axesel += (f'<line x1="{cx}" y1="{cy}" x2="{cx+math.cos(a)*R:.1f}" '
+                   f'y2="{cy+math.sin(a)*R:.1f}" stroke="#e2e2de" stroke-width="0.7"/>')
+        lx, ly = cx + math.cos(a) * (R + 18), cy + math.sin(a) * (R + 18) + 3
+        anchor = "middle"
+        if math.cos(a) > 0.3: anchor = "start"
+        elif math.cos(a) < -0.3: anchor = "end"
+        labels += (f'<text x="{lx:.1f}" y="{ly:.1f}" font-size="8.5" text-anchor="{anchor}" '
+                   f'font-family="monospace" fill="#444">{lab}</text>')
+    polys = ""
+    for name, fracs, color in series:
+        pts = " ".join(
+            f"{cx+math.cos(ang(i))*R*max(0,min(1,fracs[i])):.1f},"
+            f"{cy+math.sin(ang(i))*R*max(0,min(1,fracs[i])):.1f}" for i in range(n))
+        polys += (f'<polygon points="{pts}" fill="{color}" fill-opacity="0.10" '
+                  f'stroke="{color}" stroke-width="1.6"/>')
+        for i in range(n):
+            f = max(0, min(1, fracs[i]))
+            polys += (f'<circle cx="{cx+math.cos(ang(i))*R*f:.1f}" '
+                      f'cy="{cy+math.sin(ang(i))*R*f:.1f}" r="1.8" fill="{color}"/>')
+    return (f'<svg viewBox="0 0 {size} {size}" width="100%" style="max-width:360px">'
+            f'{rings}{axesel}{polys}{labels}</svg>')
+
+
+def _svg_grouped_bars(countries: list[str], colors: list[str],
+                      values: dict, w: int = 560, h: int = 300) -> str:
+    """Grouped vertical bars: one group per sub-dimension, one bar per country."""
+    pad_l, pad_b, pad_t, pad_r = 30, 26, 12, 8
+    plot_w = w - pad_l - pad_r
+    plot_h = h - pad_t - pad_b
+    ng = len(_SUB_DIMS)
+    nc = max(1, len(countries))
+    group_w = plot_w / ng
+    bar_w = min(20.0, (group_w - 12) / nc)
+    out = (f'<rect x="{pad_l}" y="{pad_t}" width="{plot_w}" height="{plot_h}" '
+           f'fill="#fcfcfa" stroke="#ddd"/>')
+    for gy in (0, 25, 50, 75, 100):
+        yy = pad_t + plot_h - (gy / 100) * plot_h
+        out += (f'<line x1="{pad_l}" y1="{yy:.1f}" x2="{pad_l+plot_w}" y2="{yy:.1f}" '
+                f'stroke="#eee" stroke-width="0.7"/>'
+                f'<text x="{pad_l-4}" y="{yy+3:.1f}" font-size="7.5" text-anchor="end" '
+                f'font-family="monospace" fill="#999">{gy}</text>')
+    for gi, (dk, dl) in enumerate(_SUB_DIMS):
+        gx0 = pad_l + gi * group_w
+        out += (f'<text x="{gx0+group_w/2:.1f}" y="{pad_t+plot_h+15:.1f}" font-size="8.5" '
+                f'text-anchor="middle" font-family="monospace" fill="#444">{dl}</text>')
+        for ci, code in enumerate(countries):
+            v = values.get(code, {}).get(dk)
+            v = 0 if v is None else v
+            bh = (max(0, min(100, v)) / 100) * plot_h
+            bx = gx0 + (group_w - nc * bar_w) / 2 + ci * bar_w
+            by = pad_t + plot_h - bh
+            out += (f'<rect x="{bx:.1f}" y="{by:.1f}" width="{max(2,bar_w-2):.1f}" '
+                    f'height="{bh:.1f}" fill="{colors[ci]}" stroke="#111" stroke-width="0.4">'
+                    f'<title>{code} {dl}: {v:.0f}</title></rect>')
+    return f'<svg viewBox="0 0 {w} {h}" width="100%">{out}</svg>'
+
+
+def _svg_quadrant(points: list[dict], w: int = 620, h: int = 540) -> str:
+    """Economic (x) vs political (y) risk map. points=[{code,ex,py,score}]."""
+    pad = 52
+    X = lambda v: pad + (w - 2 * pad) * max(0, min(100, v)) / 100
+    Y = lambda v: (h - pad) - (h - 2 * pad) * max(0, min(100, v)) / 100
+    out = (f'<rect x="{pad}" y="{pad}" width="{w-2*pad}" height="{h-2*pad}" '
+           f'fill="#fcfcfa" stroke="#ccc"/>')
+    mx, my = X(50), Y(50)
+    out += (f'<line x1="{mx:.1f}" y1="{pad}" x2="{mx:.1f}" y2="{h-pad}" '
+            f'stroke="#bbb" stroke-dasharray="3 3"/>'
+            f'<line x1="{pad}" y1="{my:.1f}" x2="{w-pad}" y2="{my:.1f}" '
+            f'stroke="#bbb" stroke-dasharray="3 3"/>')
+    for t, xx, yy in [("RESILIENT", X(25), Y(20)), ("MACRO-FRAGILE", X(75), Y(20)),
+                      ("POLITICALLY FRAGILE", X(25), Y(80)), ("TWIN-RISK", X(75), Y(80))]:
+        out += (f'<text x="{xx:.1f}" y="{yy:.1f}" font-size="9.5" text-anchor="middle" '
+                f'font-family="monospace" fill="#c4c4be" font-weight="bold">{t}</text>')
+    for t in (0, 25, 50, 75, 100):
+        out += (f'<text x="{X(t):.1f}" y="{h-pad+15:.1f}" font-size="7.5" text-anchor="middle" '
+                f'font-family="monospace" fill="#999">{t}</text>'
+                f'<text x="{pad-8:.1f}" y="{Y(t)+3:.1f}" font-size="7.5" text-anchor="end" '
+                f'font-family="monospace" fill="#999">{t}</text>')
+    out += (f'<text x="{w/2:.1f}" y="{h-12:.1f}" font-size="9" text-anchor="middle" '
+            f'font-family="monospace" fill="#555">ECONOMIC RISK &#8594;</text>'
+            f'<text x="14" y="{h/2:.1f}" font-size="9" text-anchor="middle" '
+            f'font-family="monospace" fill="#555" '
+            f'transform="rotate(-90 14 {h/2:.1f})">POLITICAL RISK &#8594;</text>')
+    dots = ""
+    for p in sorted(points, key=lambda d: -(d["score"] or 0)):
+        x, y = X(p["ex"]), Y(p["py"])
+        r = 4 + (p["score"] or 0) / 100 * 6
+        dots += (f'<a href="/worldstate/{p["code"]}">'
+                 f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r:.1f}" fill="{_risk_color(p["score"])}" '
+                 f'stroke="#111" stroke-width="0.6" opacity="0.85"><title>{p["code"]} '
+                 f'comp {p["score"]:.0f} &#183; econ {p["ex"]:.0f} &#183; pol {p["py"]:.0f}</title></circle>'
+                 f'<text x="{x:.1f}" y="{y-r-1.5:.1f}" font-size="7.5" text-anchor="middle" '
+                 f'font-family="monospace" fill="#222">{p["code"]}</text></a>')
+    return f'<svg viewBox="0 0 {w} {h}" width="100%">{out}{dots}</svg>'
+
+
+def _minibar(v, color="#111", width=46) -> str:
+    if v is None:
+        return '<span style="color:#999">&#8212;</span>'
+    w = max(0, min(100, v))
+    return (f'<span style="display:inline-flex;align-items:center;gap:5px">'
+            f'<span style="width:{width}px;height:8px;border:1px solid #000;background:#fff;'
+            f'position:relative;display:inline-block">'
+            f'<span style="position:absolute;left:0;top:0;bottom:0;width:{w:.0f}%;'
+            f'background:{color}"></span></span>'
+            f'<span style="font-size:10px;width:22px;color:#555">{v:.0f}</span></span>')
+
+
+def _heat_cell(v) -> str:
+    if v is None:
+        return '<td style="background:#eee;color:#999;text-align:center">&#8212;</td>'
+    col = _risk_color(v)
+    fg = "#fff" if v >= 60 else "#111"
+    return (f'<td style="background:{col};color:{fg};text-align:center;'
+            f'font-weight:bold">{v:.0f}</td>')
+
+
+def _heatmap_table(rows: list) -> str:
+    head = ('<tr><th>Country</th><th style="text-align:center">Comp</th>'
+            '<th style="text-align:center">Econ</th><th style="text-align:center">Pol</th>'
+            '<th style="text-align:center">NLP</th><th style="text-align:center">Gov</th></tr>')
+    body = ""
+    for r in rows:
+        name = _COUNTRY_NAMES.get(r.country_code, r.country_code)
+        body += (f'<tr><td style="background:#fff"><a href="/worldstate/{r.country_code}">'
+                 f'<b>{r.country_code}</b> <span style="color:#777">{name}</span></a></td>'
+                 + _heat_cell(r.composite) + _heat_cell(r.economic) + _heat_cell(r.political)
+                 + _heat_cell(r.nlp_sentiment) + _heat_cell(r.governance) + '</tr>')
+    return f'<table class="heat">{head}{body}</table>'
+
+
+_COMPARE_PRESETS = [
+    ("BRICS", "BR,RU,IN,CN,ZA"),
+    ("Latin America", "BR,AR,MX,CO,PE"),
+    ("Advanced", "US,DE,GB,FR,JP"),
+    ("Frontier", "NG,PK,EG,GH,LK"),
+]
+
+
+def _build_compare(selected: list, latest: list) -> str:
+    codes = [r.country_code for r in selected]
+    colors = [_SERIES_PALETTE[i % len(_SERIES_PALETTE)] for i in range(len(selected))]
+    values = {r.country_code: {dk: getattr(r, dk) for dk, _ in _SUB_DIMS} for r in selected}
+
+    series = [(r.country_code,
+               [((getattr(r, dk) or 0) / 100.0) for dk, _ in _SUB_DIMS],
+               colors[i]) for i, r in enumerate(selected)]
+    radar = _svg_radar_multi(["ECON", "POL", "NLP", "GOV"], series)
+    bars = _svg_grouped_bars(codes, colors, values)
+
+    clegend = "".join(
+        f'<span class="cl"><span class="csw" style="background:{colors[i]}"></span>'
+        f'{r.country_code} <span style="color:#777">'
+        f'{_COUNTRY_NAMES.get(r.country_code, r.country_code)}</span></span>'
+        for i, r in enumerate(selected))
+
+    presets = "".join(
+        f'<a class="preset" href="/compare?countries={q}">{name}</a>'
+        for name, q in _COMPARE_PRESETS)
+
+    comps = sorted([r.composite for r in selected])
+    spread = (comps[-1] - comps[0]) if comps else 0
+
+    trows = ""
+    for r in sorted(selected, key=lambda x: -x.composite):
+        lvl = _risk_label(r.composite)
+        trows += (f'<tr><td><b>{r.country_code}</b> <span style="color:#777">'
+                  f'{_COUNTRY_NAMES.get(r.country_code, r.country_code)}</span></td>'
+                  f'<td><b style="color:{_risk_color(r.composite)}">{r.composite:.1f}</b> '
+                  f'<span style="font-size:9px;color:#777">{lvl}</span></td>'
+                  f'<td>{_minibar(r.economic, _SERIES_PALETTE[0])}</td>'
+                  f'<td>{_minibar(r.political, _SERIES_PALETTE[1])}</td>'
+                  f'<td>{_minibar(r.nlp_sentiment, _SERIES_PALETTE[2])}</td>'
+                  f'<td>{_minibar(r.governance, _SERIES_PALETTE[3])}</td>'
+                  f'<td>{int((r.confidence or 0)*100)}%</td></tr>')
+
+    return _head("VisibleHand — Compare") + f"""
+<body>
+{_menubar(["File","Edit","View"])}
+<div class="desktop">
+<div class="window">
+{_titlebar("VisibleHand — Country Comparison", "/")}
+<div class="statbar">
+  <span><span class="ldot"></span>{len(selected)} countries &#183; composite spread {spread:.1f} pts</span>
+  <span style="color:#555">sub-scores 0–100</span>
+</div>
+<div class="vsub" style="padding:8px 12px 0">
+  <b>Compare:</b>&nbsp; {presets}
+  <span style="color:#999">&#183; or call <code>/compare?countries=US,BR,AR</code></span>
+</div>
+<div class="clegend" style="padding:0 12px">{clegend}</div>
+<div class="vrow">
+  <div class="vcard">
+    <div class="vh2">Sub-score profile (radar)</div>
+    <div class="vsub">Each axis is a sub-scorer; further out = higher risk. Overlaid per country.</div>
+    {radar}
+  </div>
+  <div class="vcard">
+    <div class="vh2">Sub-score comparison (grouped)</div>
+    <div class="vsub">Side-by-side magnitude on each component.</div>
+    {bars}
+  </div>
+</div>
+<div class="vcard" style="border-right:none">
+  <div class="vh2">Ranked detail</div>
+  <table class="ctbl">
+    <thead><tr><th>Country</th><th>Composite</th><th>Economic</th><th>Political</th>
+      <th>NLP</th><th>Governance</th><th>Conf.</th></tr></thead>
+    <tbody>{trows}</tbody>
+  </table>
+</div>
+{_tabbar([("Browse","/"),("Dashboard","/dashboard"),("Compare",""),("Map","/map"),("World","/world"),("API","/api"),("",""),("Exit","/")], active="Compare")}
+</div></div></body></html>"""
+
+
+def _build_map(latest: list) -> str:
+    points = [{"code": r.country_code, "ex": (r.economic or 0),
+               "py": (r.political or 0), "score": r.composite} for r in latest]
+    quad = _svg_quadrant(points)
+    heat = _heatmap_table(sorted(latest, key=lambda r: -r.composite))
+    n = len(latest)
+    avg = sum(r.composite for r in latest) / n if n else 0
+
+    return _head("VisibleHand — Risk Map") + f"""
+<body>
+{_menubar(["File","Edit","View"])}
+<div class="desktop">
+<div class="window">
+{_titlebar("VisibleHand — Risk Map & Model", "/")}
+<div class="statbar">
+  <span><span class="ldot"></span>{n} countries &#183; mean composite {avg:.1f}</span>
+  <span style="color:#555">economic &#215; political risk plane</span>
+</div>
+{_risk_legend()}
+<div class="vrow">
+  <div class="vcard" style="flex:1.3">
+    <div class="vh2">Risk plane — economic &#215; political</div>
+    <div class="vsub">Bubble size = composite. Quadrants split at the mid-line: <b>twin-risk</b>
+      (top-right) carries both macro and political stress; <b>resilient</b> (bottom-left) carries
+      neither. Click a bubble for the full country model.</div>
+    {quad}
+  </div>
+  <div class="vcard">
+    <div class="vh2">Sub-score heatmap</div>
+    <div class="vsub">Every country &#215; every sub-scorer. Darker = higher risk.</div>
+    {heat}
+  </div>
+</div>
+{_tabbar([("Browse","/"),("Dashboard","/dashboard"),("Compare","/compare"),("Map",""),("World","/world"),("API","/api"),("",""),("Exit","/")], active="Map")}
+</div></div></body></html>"""
+
+
 def _build_world(points, clusters, regional, nodes, edges, as_of) -> str:
     scatter = _svg_scatter(points)
     network = _svg_network(nodes, edges)
@@ -1184,7 +1488,7 @@ def _build_world(points, clusters, regional, nodes, edges, as_of) -> str:
 </div>
 <div class="winfooter"><span>VH-WSM v0.1 &#183; global state map</span>
   <a href="/model/leaderboard">Model leaderboard &#x25B8;</a></div>
-{_tabbar([("Browse","/"),("Dashboard","/dashboard"),("World","/world"),("Terminal","/terminal"),("API","/api"),("",""),("Exit","/")], active="World")}
+{_tabbar([("Browse","/"),("Dashboard","/dashboard"),("Compare","/compare"),("Map","/map"),("World","/world"),("Terminal","/terminal"),("API","/api"),("",""),("Exit","/")], active="World")}
 </div></div></body></html>"""
 
 
@@ -1260,6 +1564,51 @@ async def world_page(db: Session = Depends(get_db)) -> HTMLResponse:
                     edges.append((key[0], key[1], wgt))
 
     return HTMLResponse(_build_world(points, clusters, regional, nodes, edges, as_of))
+
+
+def _latest_scores(db: Session) -> list:
+    """Latest CountryScore per country, ranked by composite (robust to snapshot count)."""
+    from sqlalchemy import func
+    sub = (db.query(CountryScore.country_code.label("cc"),
+                    func.max(CountryScore.computed_at).label("mx"))
+           .group_by(CountryScore.country_code).subquery())
+    rows = (db.query(CountryScore)
+            .join(sub, (CountryScore.country_code == sub.c.cc)
+                       & (CountryScore.computed_at == sub.c.mx)).all())
+    return sorted(rows, key=lambda r: r.composite, reverse=True)
+
+
+@router.get("/compare", response_class=HTMLResponse, include_in_schema=False)
+async def compare_page(countries: str = "", db: Session = Depends(get_db)) -> HTMLResponse:
+    latest = _latest_scores(db)
+    by_code = {r.country_code: r for r in latest}
+    codes = [c.strip().upper() for c in countries.split(",") if c.strip()]
+    codes = [c for c in codes if c in by_code][:6]
+    if not codes:
+        default = ["US", "DE", "BR", "ZA", "TR", "AR"]
+        codes = [c for c in default if c in by_code] or [r.country_code for r in latest[:6]]
+    selected = [by_code[c] for c in codes]
+    if not selected:
+        return HTMLResponse(
+            _head("Compare — n/a") +
+            '<body><div class="desktop"><div class="window">' +
+            _titlebar("VisibleHand — Country Comparison", "/") +
+            '<div class="empty">No scores yet — seed the database first.</div>'
+            '</div></div></body></html>', status_code=404)
+    return HTMLResponse(_build_compare(selected, latest))
+
+
+@router.get("/map", response_class=HTMLResponse, include_in_schema=False)
+async def map_page(db: Session = Depends(get_db)) -> HTMLResponse:
+    latest = _latest_scores(db)
+    if not latest:
+        return HTMLResponse(
+            _head("Risk Map — n/a") +
+            '<body><div class="desktop"><div class="window">' +
+            _titlebar("VisibleHand — Risk Map", "/") +
+            '<div class="empty">No scores yet — seed the database first.</div>'
+            '</div></div></body></html>', status_code=404)
+    return HTMLResponse(_build_map(latest))
 
 
 # â”€â”€ ASCII terminal: rotating 3D globe + ASCII charts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -1976,6 +2325,8 @@ async def landing() -> HTMLResponse:
     </p>
     <div>
       <a class="mac-btn def" href="/dashboard">Live Dashboard</a>
+      <a class="mac-btn" href="/compare">Compare</a>
+      <a class="mac-btn" href="/map">Risk Map</a>
       <a class="mac-btn" href="/world">World Map</a>
       <a class="mac-btn" href="/terminal">ASCII Terminal</a>
       <a class="mac-btn" href="/docs">API Docs</a>

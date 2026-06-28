@@ -13,7 +13,7 @@ import {
    Components read live data via the useVH() hook; FALLBACK_FILES is the static
    archive snapshot used until (or unless) the API responds.
 ─────────────────────────────────────────────────────────────────────────── */
-const STREAM_Q=["BRA","EGY","PAK","RUS","USA","TUR","NGA","UKR","ARG","CHN","IND","VEN","ZAF","MEX","GHA","IRN","COL","PER","ZWE","KEN"];
+const STREAM_Q=["BRA","EGY","PAK","RUS","USA","TUR","NGA","UKR","ARG","CHN","IND","VEN","ZAF","MEX","GHA","LKA","COL","PER","LBN","KEN"];
 const m="font-['JetBrains_Mono',monospace]";
 function bar(s:number,w=10){const n=Math.round(s/100*w);return"▓".repeat(n)+"░".repeat(w-n);}
 
@@ -519,11 +519,15 @@ function Ticker(){
 /* Approx. lat/long (deg) for the countries the API scores — used to place live
    risk markers on the rotating globe. */
 const GEO:Record<string,[number,number]>={
-  ARG:[-34,-64], BRA:[-10,-52], CHN:[35,103], COL:[4,-73], EGY:[27,30],
-  GHA:[8,-1], IND:[22,79], IDN:[-2,118], IRN:[32,53], KEN:[0,38],
-  MEX:[23,-102], NGA:[10,8], PAK:[30,70], PER:[-10,-76], PHL:[13,122],
-  RUS:[61,100], TUR:[39,35], UKR:[49,32], USA:[40,-100], VEN:[7,-66],
-  ZAF:[-29,24], ZWE:[-19,29],
+  ARG:[-34,-64], AUS:[-25,133], BGD:[23.7,90.4], BRA:[-10,-52], CAN:[56,-106],
+  CHE:[47,8], CHL:[-33,-71], CHN:[35,103], COL:[4,-73], DEU:[51,10],
+  EGY:[27,30], ESP:[40,-4], ETH:[9,40], FRA:[47,2], GBR:[54,-2],
+  GHA:[8,-1], GRC:[39,22], HUN:[47,19], IDN:[-2,118], IND:[22,79],
+  ITA:[42,13], JPN:[36,138], KEN:[0,38], KOR:[36,128], LBN:[34,36],
+  LKA:[7,81], MAR:[32,-6], MEX:[23,-102], MYS:[4,102], NGA:[10,8],
+  NLD:[52,5], PER:[-10,-76], PHL:[13,122], PAK:[30,70], POL:[52,19],
+  RUS:[61,100], SAU:[24,45], THA:[15,101], TUR:[39,35], UKR:[49,32],
+  USA:[40,-100], VEN:[7,-66], VNM:[16,108], ZAF:[-29,24],
 };
 /* risk band → ASCII glyph (denser = higher risk); pure black on white. */
 const GLYPH:Record<Level,string>={LOW:"·",WATCH:"+",ELEVATED:"o",HIGH:"O",SEVERE:"#"};
@@ -650,7 +654,7 @@ function GlobeTerminal(){
         <AsciiGlobe/>
       </div>
       <div className={`${m} flex items-center justify-between flex-wrap gap-x-4 gap-y-1 border-t-2 border-[#101010] px-3 py-2 bg-white text-[8px] tracking-[0.08em] text-[#6B6660]`}>
-        <span>{n} NATIONS · LIVE FROM /risk/compare</span>
+        <span>{n} NATIONS · LIVE FROM /risk/bulk</span>
         <span className="text-[#101010]">· LOW&nbsp;&nbsp;+ WATCH&nbsp;&nbsp;o ELEV&nbsp;&nbsp;O HIGH&nbsp;&nbsp;# SEVERE</span>
       </div>
     </div>
@@ -719,28 +723,27 @@ function SignalModule(){
 /* ═══════════════════════════════════════════════════════════════════════════
    DRAWER CABINET  ·  animated filing drawer + country index
 ═══════════════════════════════════════════════════════════════════════════ */
-const CAB=[
-  {s:"A",rows:[["AFG","001"],["AGO","002"],["ALB","003"],["ARG","004"],["ARM","005"],["AUS","006"]]},
-  {s:"B",rows:[["BDI","007"],["BEL","008"],["BFA","009"],["BGD","010"],["BOL","011"],["BRA","012"]]},
-  {s:"C",rows:[["CAN","013"],["CHL","014"],["CHN","015"],["COL","016"]]},
-  {s:"E",rows:[["ECU","017"],["EGY","018"],["ETH","019"],["ESP","020"]]},
-  {s:"G",rows:[["GAB","021"],["GBR","022"],["GHA","023"],["GRC","024"]]},
-  {s:"I",rows:[["IDN","025"],["IND","026"],["IRN","027"],["IRQ","028"]]},
-  {s:"M",rows:[["MAR","029"],["MEX","030"],["MWI","031"],["MOZ","032"]]},
-  {s:"N",rows:[["NAM","033"],["NER","034"],["NGA","035"],["NIC","036"]]},
-  {s:"P",rows:[["PAK","037"],["PAN","038"],["PER","039"],["PHL","040"]]},
-  {s:"R",rows:[["ROU","041"],["RUS","042"],["RWA","043"]]},
-  {s:"T",rows:[["TCD","044"],["THA","045"],["TUN","046"],["TUR","047"]]},
-  {s:"U",rows:[["UGA","048"],["UKR","049"],["USA","050"],["UZB","051"]]},
-  {s:"V",rows:[["VEN","052"],["VNM","053"]]},
-  {s:"Z",rows:[["ZAF","054"],["ZMB","055"],["ZWE","056"]]},
-] as const;
+/* The country index is built from the live universe (the keys of FILES), so it
+   always mirrors exactly what the API scores — never a hard-coded list. */
+function buildCab(files:Record<string,CF>){
+  const codes=Object.keys(files).sort();
+  const groups:{s:string;rows:[string,string][]}[]=[];
+  codes.forEach((code,i)=>{
+    const letter=code[0]!;
+    const num=String(i+1).padStart(3,"0");
+    let g=groups.find(x=>x.s===letter);
+    if(!g){g={s:letter,rows:[]};groups.push(g);}
+    g.rows.push([code,num]);
+  });
+  return groups;
+}
 
 function Cabinet(){
   const {files:FILES,meta}=useVH();
   const [open,setOpen]=useState(false);
   const [active,setActive]=useState<string|null>(null);
   const af=active?FILES[active]:null;
+  const CAB=buildCab(FILES);
 
   return(
     <section id="cabinet" className="border-t-2 border-[#101010] py-14 bg-[#E9E5DA]">
@@ -892,7 +895,7 @@ function MacDesktop(){
   const wf=(v:number|undefined,fb:string)=>(typeof v==="number"?v.toFixed(2):fb);
   const calib=meta.calibration
     ? `ROC-AUC ${meta.calibration.auc.toFixed(2)} · Brier ${meta.calibration.brier.toFixed(2)}`
-    : "ROC-AUC 0.81 · Brier 0.14";
+    : "ROC-AUC 1.00 · Brier 0.07";
   const WINS=[
     {id:"ECON",title:"ECONOMIC SCORER",dp:{x:20,y:45},w:240,content:[["SOURCE","World Bank WDI"],["SOURCE","IMF WEO · BIS · ILO"],["WEIGHT",wf(W?.economic,"0.45")],["DRIVERS","GDP · inflation · fiscal · CA"]]},
     {id:"NLP", title:"NLP SIGNAL",     dp:{x:288,y:18},w:228,content:[["SOURCE","Central-bank text"],["MODEL","FinBERT + lexicon"],["WEIGHT",wf(W?.nlp,"0.20")],["DRIVERS","tone · hawkish / dovish"]]},
@@ -1009,6 +1012,14 @@ function ApiTerminal(){
                 TEST THE API ↗
               </a>
               <div className="grid grid-cols-2 gap-2 mt-2">
+                <a href={`${API_BASE}/map`} target="_blank" rel="noopener noreferrer"
+                  className={`${m} border-2 border-[#101010] px-2 py-2 text-[10px] tracking-[0.1em] uppercase text-[#101010] hover:bg-[#101010] hover:text-[#F4F2EA] transition-colors duration-[120ms] text-center`}>
+                  RISK MAP ↗
+                </a>
+                <a href={`${API_BASE}/compare`} target="_blank" rel="noopener noreferrer"
+                  className={`${m} border-2 border-[#101010] px-2 py-2 text-[10px] tracking-[0.1em] uppercase text-[#101010] hover:bg-[#101010] hover:text-[#F4F2EA] transition-colors duration-[120ms] text-center`}>
+                  COMPARE ↗
+                </a>
                 <a href={`${API_BASE}/risk/BR`} target="_blank" rel="noopener noreferrer"
                   className={`${m} border-2 border-[#101010] px-2 py-2 text-[10px] tracking-[0.1em] uppercase text-[#101010] hover:bg-[#101010] hover:text-[#F4F2EA] transition-colors duration-[120ms] text-center`}>
                   RUN /risk/BR ↗
@@ -1045,6 +1056,7 @@ function Metric({value,dec,label,note}:{value:number;dec:number;label:string;not
 function Numbers(){
   const {meta}=useVH();
   const cal=meta.calibration;
+  const bt=meta.backtest;
   return(
     <section className="border-t-2 border-[#101010] py-14 bg-[#E9E5DA]">
       <div className="max-w-[1440px] mx-auto px-6 md:px-12">
@@ -1055,8 +1067,8 @@ function Numbers(){
         <div className="grid grid-cols-2 sm:grid-cols-3 border-l-2 border-t-2 border-[#101010]">
           <Metric value={cal?cal.auc:1.0}       dec={2} label="ROC-AUC"          note="Heuristic crisis backtest"/>
           <Metric value={cal?cal.brier:0.07}    dec={2} label="Brier Score"      note="Probabilistic calibration"/>
-          <Metric value={cal?cal.nEvents:99}    dec={0} label="Stress Events"    note="Out-of-sample validation"/>
-          <Metric value={2000} dec={0} label="Backtest Start"   note="2000–2023 test window"/>
+          <Metric value={cal?cal.nEvents:99}    dec={0} label="Stress Events"    note={bt?`${bt.nCrises} crises in window`:"Out-of-sample validation"}/>
+          <Metric value={bt?bt.start:2000} dec={0} label="Backtest Start"   note={bt?`${bt.start}–${bt.end} test window`:"2000–2023 test window"}/>
           <Metric value={meta.confidenceFloor??0.7} dec={2} label="Confidence Floor" note="Median file confidence"/>
           <Metric value={meta.scored??44} dec={0} label="Countries"        note="Live scored universe"/>
         </div>
