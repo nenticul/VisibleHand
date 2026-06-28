@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <rect width="32" height="32" fill="#101010"/>
+  <rect x="3" y="3" width="26" height="26" fill="none" stroke="#F4F2EA" stroke-width="1.2"/>
+  <text x="16" y="21" font-family="'JetBrains Mono', ui-monospace, monospace" font-size="14"
+        font-weight="700" text-anchor="middle" fill="#F4F2EA" letter-spacing="-1">VH</text>
+  <rect x="10" y="24" width="12" height="2" fill="#8D2F2F"/>
+</svg>
