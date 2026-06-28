@@ -13,6 +13,8 @@ if not database_url:
         "DATABASE_URL environment variable is not set. "
         "In Railway: add DATABASE_URL = ${{Postgres.DATABASE_URL}} to your service variables."
     )
+# Railway provides postgres:// but SQLAlchemy requires postgresql://
+database_url = database_url.replace("postgres://", "postgresql://", 1)
 config.set_main_option("sqlalchemy.url", database_url)
 
 if config.config_file_name is not None:

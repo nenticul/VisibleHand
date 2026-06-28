@@ -6,8 +6,14 @@ single, validated source of truth. Values are read from environment variables
 (or a local .env file) at startup.
 """
 
+import os
 from functools import lru_cache
 from typing import Literal
+
+# Railway provides postgres:// but SQLAlchemy requires postgresql://
+_raw_db_url = os.environ.get("DATABASE_URL", "")
+if _raw_db_url.startswith("postgres://"):
+    os.environ["DATABASE_URL"] = _raw_db_url.replace("postgres://", "postgresql://", 1)
 
 try:
     from pydantic_settings import BaseSettings, SettingsConfigDict
