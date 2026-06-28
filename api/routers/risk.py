@@ -21,12 +21,26 @@ from api.models.database import (
 )
 from api.models.schemas import (
     RiskResponse, ScoreBreakdown, HistoryPoint, MoverPoint,
-    DriverAttribution, ForecastPoint,
+    DriverAttribution, ForecastPoint, BaselineResponse, PeerGroupInfo,
 )
 from core.scoring.composite import compute_composite, DEFAULT_WEIGHTS
 from core.scoring.labels import risk_level
+from core.scoring.baseline import (
+    build_baseline_reference, resolve_peer_group, BaselineReference,
+    INCOME_GROUP, REGION, ANCHOR_ECONOMIES,
+)
+from core.scoring.stats import robust_z  # noqa: F401  (kept for anchor stats)
 
 log = logging.getLogger(__name__)
+
+
+def _norm_mode(mode: Optional[str]) -> str:
+    """Normalise the measurement-mode query param to a canonical value."""
+    m = (mode or "temporal").strip().lower()
+    if m in ("cross_sectional", "cross-sectional", "crosssectional",
+             "baseline", "peer", "peers", "global", "absolute"):
+        return "cross_sectional"
+    return "temporal"
 
 COUNTRY_NAMES: dict[str, str] = {
     "US": "United States", "GB": "United Kingdom", "DE": "Germany",
@@ -47,8 +61,47 @@ COUNTRY_NAMES: dict[str, str] = {
 router = APIRouter(prefix="/risk", tags=["risk"])
 
 
-def _cache_key(code: str, ew: float, pw: float, nw: float, gw: float) -> str:
-    return f"{code}:{ew:.2f}:{pw:.2f}:{nw:.2f}:{gw:.2f}"
+def _cache_key(code: str, ew: float, pw: float, nw: float, gw: float, mode: str = "temporal") -> str:
+    return f"{code}:{ew:.2f}:{pw:.2f}:{nw:.2f}:{gw:.2f}:{mode}"
+
+
+# ── Cross-sectional baseline reference (built once, cached) ───────────────────
+_baseline_cache: dict[str, object] = {"ref": None, "ts": 0.0}
+_BASELINE_TTL = 300.0  # seconds
+
+
+def _get_baseline_reference(db: Session) -> BaselineReference:
+    """
+    Build (and cache) the cross-country reference distribution: the latest value
+    of every macro indicator for every country in the database. Reused across a
+    whole /compare call and refreshed every few minutes.
+    """
+    import time
+    now = time.time()
+    ref = _baseline_cache.get("ref")
+    if ref is not None and (now - float(_baseline_cache.get("ts", 0.0))) < _BASELINE_TTL:
+        return ref  # type: ignore[return-value]
+
+    rows = db.query(Indicator).all()
+    # Keep the most recent (year, date) value per (country, metric).
+    best: dict[tuple, tuple] = {}
+    for r in rows:
+        key = (r.country_code, r.metric)
+        ordkey = (r.year or 0, r.date or "")
+        cur = best.get(key)
+        if cur is None or ordkey > cur[0]:
+            best[key] = (ordkey, r.value)
+
+    latest_by_country: dict[str, dict[str, float]] = {}
+    for (cc, metric), (_, val) in best.items():
+        if val is None:
+            continue
+        latest_by_country.setdefault(cc, {})[metric] = val
+
+    ref = build_baseline_reference(latest_by_country)
+    _baseline_cache["ref"] = ref
+    _baseline_cache["ts"] = now
+    return ref
 
 
 def _build_response(
@@ -58,14 +111,16 @@ def _build_response(
     political_weight: float,
     nlp_weight: float,
     governance_weight: float,
+    mode: str = "temporal",
 ) -> RiskResponse:
     code = country_code.upper()
     name = COUNTRY_NAMES.get(code, code)
-    cache_key = _cache_key(code, economic_weight, political_weight, nlp_weight, governance_weight)
+    mode = _norm_mode(mode)
+    cache_key = _cache_key(code, economic_weight, political_weight, nlp_weight, governance_weight, mode)
 
     cached = score_cache.get(cache_key)
     if cached is not None:
-        log.debug("cache hit for %s", code)
+        log.debug("cache hit for %s (%s)", code, mode)
         return cached
 
     # Load indicators (chronological order)
@@ -109,6 +164,8 @@ def _build_response(
     )
     score_history = [r.composite for r in history_rows] if len(history_rows) >= 3 else None
 
+    baseline_ref = _get_baseline_reference(db) if mode == "cross_sectional" else None
+
     result = compute_composite(
         indicators=indicators,
         events=event_dicts,
@@ -121,6 +178,8 @@ def _build_response(
         political_weight=political_weight,
         nlp_weight=nlp_weight,
         governance_weight=governance_weight,
+        mode=mode,
+        baseline_ref=baseline_ref,
     )
 
     now = datetime.now(timezone.utc).isoformat()
@@ -162,8 +221,19 @@ def _build_response(
         components=result.get("components"),
         forecast=forecast,
         regime_flags=result.get("regime_flags"),
+        mode=mode,
+        peer_group=result.get("peer_group"),
+        peer_percentiles=result.get("peer_percentiles"),
         updated_at=now,
     )
+
+    # Only the temporal score is the canonical time series; persist that one so
+    # history / movers stay clean. Cross-sectional is computed on demand + cached.
+    if mode != "temporal":
+        score_cache.set(cache_key, response)
+        log.info("scored %s (cross_sectional) composite=%.1f peer=%s",
+                 code, result["composite"], result.get("peer_group"))
+        return response
 
     # Persist score snapshot
     db.add(CountryScore(
@@ -197,6 +267,7 @@ def _build_response(
 @router.get("/compare", response_model=list[RiskResponse])
 async def compare_countries(
     countries: str = Query(..., description="Comma-separated ISO codes, e.g. US,DE,BR"),
+    mode: str = Query("temporal", description="'temporal' (vs own history) or 'cross_sectional' (vs peer + anchor baseline)"),
     economic_weight: float = Query(DEFAULT_WEIGHTS["economic"], ge=0, le=1),
     political_weight: float = Query(DEFAULT_WEIGHTS["political"], ge=0, le=1),
     nlp_weight: float = Query(DEFAULT_WEIGHTS["nlp"], ge=0, le=1),
@@ -209,9 +280,56 @@ async def compare_countries(
     if not codes:
         raise HTTPException(status_code=422, detail="Provide at least one country code")
     return [
-        _build_response(code, db, economic_weight, political_weight, nlp_weight, governance_weight)
+        _build_response(code, db, economic_weight, political_weight, nlp_weight, governance_weight, mode)
         for code in codes[:20]  # cap at 20
     ]
+
+
+@router.get("/baseline", response_model=BaselineResponse)
+async def get_baseline(
+    db: Session = Depends(get_db),
+    _key: Optional[str] = Depends(optional_api_key),
+) -> BaselineResponse:
+    """
+    Introspect the cross-sectional reference distribution: the anchor basket,
+    the income/region peer taxonomy, per-metric anchor statistics, and each
+    country's resolved peer group. Lets anyone audit exactly what a
+    cross-sectional score is measured against.
+    """
+    from statistics import median
+    ref = _get_baseline_reference(db)
+
+    anchor_stats: dict[str, dict[str, float]] = {}
+    for metric, vals in ref.anchor.items():
+        if not vals:
+            continue
+        med = median(vals)
+        devs = [abs(v - med) for v in vals]
+        mad = round(median(devs) * 1.4826, 4) if devs else 0.0
+        anchor_stats[metric] = {"median": round(med, 4), "mad": mad, "n": float(len(vals))}
+
+    metric_coverage = {m: len(pop) for m, pop in ref.populations.items()}
+
+    peer_groups: list[PeerGroupInfo] = []
+    for cc in ref.countries:
+        label, peers = resolve_peer_group(cc, ref)
+        peer_groups.append(PeerGroupInfo(
+            country=cc,
+            income_group=INCOME_GROUP.get(cc),
+            region=REGION.get(cc),
+            peer_group=label,
+            peers=peers,
+        ))
+
+    return BaselineResponse(
+        n_countries=len(ref.countries),
+        anchor_economies=ANCHOR_ECONOMIES,
+        income_groups={c: INCOME_GROUP[c] for c in ref.countries if c in INCOME_GROUP},
+        regions={c: REGION[c] for c in ref.countries if c in REGION},
+        anchor_stats=anchor_stats,
+        metric_coverage=metric_coverage,
+        peer_groups=peer_groups,
+    )
 
 
 @router.get("/movers", response_model=list[MoverPoint])
@@ -308,6 +426,7 @@ async def get_bulk(
 @router.get("/{country_code}", response_model=RiskResponse)
 async def get_risk(
     country_code: str,
+    mode: str = Query("temporal", description="'temporal' (vs own history) or 'cross_sectional' (vs peer + anchor baseline)"),
     economic_weight: float = Query(DEFAULT_WEIGHTS["economic"], ge=0, le=1),
     political_weight: float = Query(DEFAULT_WEIGHTS["political"], ge=0, le=1),
     nlp_weight: float = Query(DEFAULT_WEIGHTS["nlp"], ge=0, le=1),
@@ -318,7 +437,7 @@ async def get_risk(
     """Return composite political-economic risk score for a country."""
     if len(country_code) != 2 or not country_code.isalpha():
         raise HTTPException(status_code=422, detail="Provide a 2-letter ISO country code, e.g. BR")
-    return _build_response(country_code, db, economic_weight, political_weight, nlp_weight, governance_weight)
+    return _build_response(country_code, db, economic_weight, political_weight, nlp_weight, governance_weight, mode)
 
 
 @router.get("/{country_code}/history", response_model=list[HistoryPoint])

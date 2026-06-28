@@ -29,138 +29,87 @@ const VH_ASCII = [
   "  ╚═══╝  ╚═╝╚══════╝╚═╝╚═════╝ ╚══════╝╚══════╝    ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝╚═════╝",
 ];
 
-/* Precompute (row, col) → physIdx map — O(1) lookup during render */
-function buildPhysMap(): { map: Map<string, number>; count: number } {
-  const map = new Map<string, number>();
-  let idx = 0;
-  for (let row = 0; row < VH_ASCII.length; row++) {
-    const line = VH_ASCII[row]!;
-    for (let col = 0; col < line.length; col++) {
-      if (line[col] !== " ") {
-        map.set(`${row}-${col}`, idx++);
+/* ASCII title drawn to ONE <canvas> — a single GPU layer with ~330 fillText
+   calls per frame, instead of ~330 individually-transformed DOM spans (each its
+   own compositor layer). Same per-character spring physics; lightning-fast and
+   it never touches layout, so it can't lag the page or flicker a scrollbar. */
+const AsciiTitle = memo(function AsciiTitle(){
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(()=>{
+    const canvas = ref.current; if(!canvas) return;
+    const ctx = canvas.getContext("2d"); if(!ctx) return;
+    const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    const COLS = Math.max(...VH_ASCII.map(l=>l.length));
+    const ROWS = VH_ASCII.length;
+    const glyphs:{ch:string;col:number;row:number;x:number;y:number;vx:number;vy:number}[] = [];
+    for(let row=0;row<ROWS;row++){
+      const line = VH_ASCII[row]!;
+      for(let col=0;col<line.length;col++){
+        if(line[col] !== " ") glyphs.push({ch:line[col]!,col,row,x:0,y:0,vx:0,vy:0});
       }
     }
-  }
-  return { map, count: idx };
-}
-const { map: PHYS_MAP, count: PHYS_COUNT } = buildPhysMap();
 
-/* Per-character spring physics — direct DOM writes, zero React re-renders */
-function useAsciiPhysics() {
-  const spanRefs = useRef<(HTMLSpanElement|null)[]>(new Array(PHYS_COUNT).fill(null));
-  const rest = useRef<{x:number;y:number}[]>([]);
-  const pos  = useRef<{x:number;y:number}[]>(Array.from({length:PHYS_COUNT},()=>({x:0,y:0})));
-  const vel  = useRef<{x:number;y:number}[]>(Array.from({length:PHYS_COUNT},()=>({x:0,y:0})));
-  const mouse = useRef({x:-9999,y:-9999});
-  const raf   = useRef(0);
+    let fs=0, charW=0, lineH=0, W=0, H=0, mx=-9999, my=-9999;
+    const layout = ()=>{
+      const dpr = window.devicePixelRatio || 1;
+      const availW = canvas.parentElement?.clientWidth || window.innerWidth;
+      fs = Math.max(6, Math.min(21, availW/(COLS*0.6)));   // matches the old clamp(6,1.45vw,21)
+      charW = fs*0.6; lineH = fs*1.25;
+      W = COLS*charW; H = ROWS*lineH;
+      canvas.style.width = W+"px"; canvas.style.height = H+"px";
+      canvas.width = Math.round(W*dpr); canvas.height = Math.round(H*dpr);
+      ctx.setTransform(dpr,0,0,dpr,0,0);
+      ctx.font = `${fs}px 'JetBrains Mono', ui-monospace, monospace`;
+      ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillStyle = "#101010";
+    };
+    const drawStatic = ()=>{ ctx.clearRect(0,0,W,H); for(const g of glyphs) ctx.fillText(g.ch, g.col*charW+charW/2, g.row*lineH+lineH/2); };
+    layout(); drawStatic();
 
-  const captureRest = useCallback(()=>{
-    rest.current = spanRefs.current.map(el=>{
-      if(!el) return {x:0,y:0};
-      const r = el.getBoundingClientRect();
-      return {x: r.left+r.width/2+window.scrollX, y: r.top+r.height/2+window.scrollY};
-    });
-    pos.current = Array.from({length:PHYS_COUNT},()=>({x:0,y:0}));
-    vel.current = Array.from({length:PHYS_COUNT},()=>({x:0,y:0}));
-  },[]);
-
-  useEffect(()=>{
-    const t = setTimeout(captureRest, 220);
-    window.addEventListener("resize", captureRest);
-    return()=>{ clearTimeout(t); window.removeEventListener("resize", captureRest); };
-  },[captureRest]);
-
-  useEffect(()=>{
-    const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (reduce) return;   // keep the title static for reduced-motion users
-    const onMove = (e:MouseEvent) => { mouse.current = {x:e.clientX, y:e.clientY}; };
+    const onMove = (e:MouseEvent)=>{ const r=canvas.getBoundingClientRect(); mx=e.clientX-r.left; my=e.clientY-r.top; };
     window.addEventListener("mousemove", onMove, {passive:true});
-    const SPRING=0.055, DAMPING=0.72, RADIUS=160, FORCE=28;
-    let running=false, visible=true;
+    window.addEventListener("resize", layout);
 
-    const tick = (time:number) => {
-      const mx = mouse.current.x + window.scrollX;
-      const my = mouse.current.y + window.scrollY;
-      const t  = time * 0.001;
-      for (let i = 0; i < PHYS_COUNT; i++) {
-        const r = rest.current[i] ?? {x:0,y:0};
-        const p = pos.current[i]!;
-        const v = vel.current[i]!;
-        const ambFx = Math.sin(t*0.38 + i*0.31) * 0.04;
-        const ambFy = Math.cos(t*0.27 + i*0.47) * 0.025;
-        const dx = mx - r.x, dy = my - r.y;
-        const dist = Math.sqrt(dx*dx + dy*dy);
+    const SPRING=0.055, DAMPING=0.72, RADIUS=160, FORCE=28, DEG=Math.PI/180;
+    let running=false, visible=true, raf=0;
+    const frame = (time:number)=>{
+      ctx.clearRect(0,0,W,H);
+      const t = time*0.001;
+      for(let i=0;i<glyphs.length;i++){
+        const g = glyphs[i]!;
+        const cx = g.col*charW+charW/2, cy = g.row*lineH+lineH/2;
+        const ambFx = Math.sin(t*0.38+i*0.31)*0.04, ambFy = Math.cos(t*0.27+i*0.47)*0.025;
+        const dx = mx-cx, dy = my-cy, dist = Math.sqrt(dx*dx+dy*dy);
         let fx=0, fy=0;
-        if (dist < RADIUS && dist > 0.5) {
-          const str = (1 - dist/RADIUS)**2 * FORCE;
-          fx = -(dx/dist)*str; fy = -(dy/dist)*str;
-        }
-        v.x = (v.x - p.x*SPRING + fx + ambFx) * DAMPING;
-        v.y = (v.y - p.y*SPRING + fy + ambFy) * DAMPING;
-        p.x += v.x; p.y += v.y;
-        const el = spanRefs.current[i];
-        if (el) {
-          el.style.transform = `translate(${p.x.toFixed(2)}px,${p.y.toFixed(2)}px) rotate(${(v.x*0.6).toFixed(2)}deg)`;
+        if(dist<RADIUS && dist>0.5){ const s=(1-dist/RADIUS)**2*FORCE; fx=-(dx/dist)*s; fy=-(dy/dist)*s; }
+        g.vx = (g.vx - g.x*SPRING + fx + ambFx)*DAMPING;
+        g.vy = (g.vy - g.y*SPRING + fy + ambFy)*DAMPING;
+        g.x += g.vx; g.y += g.vy;
+        const rot = g.vx*0.6*DEG;
+        if(rot>0.0008 || rot<-0.0008){
+          ctx.save(); ctx.translate(cx+g.x, cy+g.y); ctx.rotate(rot); ctx.fillText(g.ch,0,0); ctx.restore();
+        } else {
+          ctx.fillText(g.ch, cx+g.x, cy+g.y);
         }
       }
-      if (running) raf.current = requestAnimationFrame(tick);
+      if(running) raf = requestAnimationFrame(frame);
     };
-    const start=()=>{ if(!running){ running=true; raf.current=requestAnimationFrame(tick); } };
-    const stop =()=>{ running=false; cancelAnimationFrame(raf.current); };
-    const hero=document.getElementById("top");
-    const io=new IntersectionObserver(([e])=>{ visible=e.isIntersecting; (visible && !document.hidden) ? start() : stop(); },{threshold:0});
-    if(hero) io.observe(hero); else start();
-    const onVis=()=>{ document.hidden ? stop() : (visible && start()); };
+    const start = ()=>{ if(!running && !reduce){ running=true; raf=requestAnimationFrame(frame); } };
+    const stop  = ()=>{ running=false; cancelAnimationFrame(raf); };
+
+    const hero = document.getElementById("top");
+    const io = new IntersectionObserver(([e])=>{ visible=e.isIntersecting; (visible && !document.hidden) ? start() : stop(); }, {threshold:0});
+    if(!reduce){ if(hero) io.observe(hero); else start(); }
+    const onVis = ()=>{ document.hidden ? stop() : (visible && start()); };
     document.addEventListener("visibilitychange", onVis);
-    return()=>{ stop(); io.disconnect(); document.removeEventListener("visibilitychange",onVis); window.removeEventListener("mousemove",onMove); };
+    // Re-measure once the web font loads (first paint may use the fallback metrics).
+    if(document.fonts && document.fonts.ready) document.fonts.ready.then(()=>{ layout(); if(!running) drawStatic(); });
+
+    return ()=>{ stop(); io.disconnect(); document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("mousemove", onMove); window.removeEventListener("resize", layout); };
   },[]);
-
-  return spanRefs;
-}
-
-function AsciiTitle() {
-  const refs = useAsciiPhysics();
-  return (
-    <div
-      aria-label="VisibleHand"
-      className="select-none"
-      style={{
-        fontFamily: "'JetBrains Mono', monospace",
-        fontSize: "clamp(6px, 1.45vw, 21px)",
-        lineHeight: 1.25,
-        // `clip` (not auto/hidden) so character transforms never expand a
-        // scroll area or flicker a scrollbar; the margin lets the springy
-        // glyphs overflow visually without being cut.
-        overflow: "clip",
-        overflowClipMargin: "60px",
-        maxWidth: "100%",
-      }}
-    >
-      {VH_ASCII.map((line, row) => (
-        <div key={row} style={{whiteSpace:"pre", display:"block"}}>
-          {[...line].map((ch, col) => {
-            const key = `${row}-${col}`;
-            if (ch === " ") {
-              /* space: invisible but holds monospace position */
-              return <span key={key} style={{display:"inline-block",width:"1ch"}}>{" "}</span>;
-            }
-            const pIdx = PHYS_MAP.get(key) ?? -1;
-            return (
-              <span
-                key={key}
-                ref={el => { if (pIdx >= 0) refs.current[pIdx] = el; }}
-                className="inline-block will-change-transform text-[#101010]"
-                aria-hidden="true"
-              >
-                {ch}
-              </span>
-            );
-          })}
-        </div>
-      ))}
-    </div>
-  );
-}
+  return <canvas ref={ref} aria-label="VisibleHand" role="img" className="select-none block max-w-full" style={{display:"block"}}/>;
+});
 
 /* ═══════════════════════════════════════════════════════════════════════════
    TERRAIN CANVAS  ·  black ink on paper
@@ -526,7 +475,7 @@ function Hero(){
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-8 lg:gap-12 mt-auto">
           <div>
             <div className={`${m} grid grid-cols-3 border-2 border-[#101010] mb-6`} style={{boxShadow:"4px 4px 0 #101010"}}>
-              {[[meta.scored?`${meta.scored}`:"190+","COUNTRIES"],["25+","YEARS"],["DAILY","UPDATES"]].map(([n,l])=>(
+              {[[`${meta.scored ?? 44}`,"COUNTRIES"],["25+","YEARS"],["DAILY","UPDATES"]].map(([n,l])=>(
                 <div key={l} className="px-4 py-4 border-r-2 border-[#101010] last:border-0">
                   <div className="text-[28px] md:text-[36px] font-black leading-none text-[#101010]">{n}</div>
                   <div className="text-[9px] tracking-[0.14em] text-[#6B6660] mt-1">{l}</div>
@@ -567,12 +516,43 @@ function Ticker(){
 /* ═══════════════════════════════════════════════════════════════════════════
    SIGNAL MODULE  ·  hardware panel + VU meters (image-4 aesthetic)
 ═══════════════════════════════════════════════════════════════════════════ */
+function ModeToggle(){
+  const {mode,setMode}=useVH();
+  const opts:[("temporal"|"cross_sectional"),string,string][]=[
+    ["temporal","vs OWN HISTORY","each country normalised against its own past — detects regime shifts"],
+    ["cross_sectional","vs GLOBAL BASELINE","ranked against income + region peers and an investment-grade anchor"],
+  ];
+  return(
+    <div className="flex flex-col items-start sm:items-end gap-[6px]">
+      <div className={`${m} inline-flex border-2 border-[#101010]`} style={{boxShadow:"3px 3px 0 #101010"}}>
+        {opts.map(([val,label])=>(
+          <button key={val} onClick={()=>setMode(val)} aria-pressed={mode===val}
+            className="px-3 py-[7px] text-[9px] tracking-[0.12em] uppercase transition-colors duration-[120ms]"
+            style={{background:mode===val?"#101010":"#F4F2EA",color:mode===val?"#F4F2EA":"#101010"}}>
+            {label}
+          </button>
+        ))}
+      </div>
+      <div className={`${m} text-[8px] tracking-[0.06em] text-[#A09A8E] max-w-[300px] sm:text-right`}>
+        {opts.find(o=>o[0]===mode)![2]}
+      </div>
+    </div>
+  );
+}
+
 function SignalModule(){
   const {files:FILES}=useVH();
   const top=Object.entries(FILES).sort((a,b)=>b[1].score-a[1].score).slice(0,16);
   return(
     <section id="signal" className="border-t-2 border-[#101010] py-14 bg-[#F4F2EA]">
       <div className="max-w-[1440px] mx-auto px-6 md:px-12">
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6">
+          <div>
+            <div className={`${m} text-[9px] tracking-[0.18em] text-[#6B6660] mb-1`}>001 · SIGNAL DESK</div>
+            <div className="font-['Inter',sans-serif] font-black uppercase leading-none text-[#101010]" style={{fontSize:"clamp(20px,3vw,32px)"}}>MEASUREMENT MODE</div>
+          </div>
+          <ModeToggle/>
+        </div>
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4 mb-4">
           <HwPanel title="RISK CHANNEL STRIP" code="" accent="#8D2F2F">
             <div className="p-4">
@@ -596,12 +576,12 @@ function SignalModule(){
               ))}
             </div>
           </HwPanel>
-          <HwPanel title="30-DAY DELTA" code="" accent="#2F5F5F">
+          <HwPanel title="7-DAY DELTA" code="" accent="#2F5F5F">
             <div className="p-4">
               {Object.entries(FILES).sort((a,b)=>Math.abs(b[1].delta)-Math.abs(a[1].delta)).slice(0,11).map(([c,f])=>(
                 <div key={c} className={`${m} flex items-baseline gap-3 text-[12px] py-[2px]`}>
                   <span className="w-7 shrink-0 text-[#6B6660]">{c}</span>
-                  <span className="flex-1 text-[10px]" style={{color:f.delta>0?"#8D2F2F":"#4A6840"}}>{f.delta>0?"▲":"▼"} {Math.abs(f.delta).toFixed(1)}</span>
+                  <span className="flex-1 text-[10px]" style={{color:f.delta>0?"#8D2F2F":f.delta<0?"#4A6840":"#A09A8E"}}>{f.delta>0?"▲":f.delta<0?"▼":"→"} {Math.abs(f.delta).toFixed(1)}</span>
                   <span className="tabular-nums text-[#101010]">{f.score.toFixed(1)}</span>
                 </div>
               ))}
@@ -748,7 +728,7 @@ function Cabinet(){
                         <div className="text-[9px] tracking-[0.1em] text-[#6B6660] mb-1">STATUS</div>
                         <div className="text-[12px] font-semibold" style={{color:LVL_INK[af.level]}}>{af.level}</div>
                         <div className="text-[11px] mt-2" style={{color:LVL_INK[af.level]}}>{bar(af.score,11)}</div>
-                        <div className="text-[9px] mt-2" style={{color:af.delta>0?"#8D2F2F":"#4A6840"}}>30D: {af.delta>0?`+${af.delta.toFixed(1)}`:af.delta.toFixed(1)}</div>
+                        <div className="text-[9px] mt-2" style={{color:af.delta>0?"#8D2F2F":af.delta<0?"#4A6840":"#A09A8E"}}>7D: {af.delta>0?`+${af.delta.toFixed(1)}`:af.delta.toFixed(1)}</div>
                       </div>
                     </div>
                     <div className="border-t border-[#D8D4C9] pt-3">
@@ -791,10 +771,10 @@ function MacDesktop(){
     ? `ROC-AUC ${meta.calibration.auc.toFixed(2)} · Brier ${meta.calibration.brier.toFixed(2)}`
     : "ROC-AUC 0.81 · Brier 0.14";
   const WINS=[
-    {id:"ECON",title:"ECONOMIC SCORER",dp:{x:20,y:45},w:240,content:[["SOURCE","World Bank WDI"],["SOURCE","IMF WEO / FRED"],["WEIGHT",wf(W?.economic,"0.42")],["DRIVERS","GDP · inflation · fiscal · CA"]]},
-    {id:"NLP", title:"NLP SIGNAL",     dp:{x:288,y:18},w:228,content:[["SOURCE","GDELT 2.0"],["MODEL","sentiment NLP"],["WEIGHT",wf(W?.nlp,"0.18")],["DRIVERS","tone · frequency · spread"]]},
-    {id:"POL", title:"POLITICAL",      dp:{x:155,y:240},w:238,content:[["SOURCE","ACLED · UCDP"],["WEIGHT",wf(W?.political,"0.22")],["DRIVERS","conflict · elections · security"]]},
-    {id:"GOV", title:"GOVERNANCE",     dp:{x:418,y:155},w:228,content:[["SOURCE","V-Dem · FH · WGI"],["WEIGHT",wf(W?.governance,"0.18")],["DRIVERS","rule of law · press · corruption"]]},
+    {id:"ECON",title:"ECONOMIC SCORER",dp:{x:20,y:45},w:240,content:[["SOURCE","World Bank WDI"],["SOURCE","IMF WEO · BIS · ILO"],["WEIGHT",wf(W?.economic,"0.45")],["DRIVERS","GDP · inflation · fiscal · CA"]]},
+    {id:"NLP", title:"NLP SIGNAL",     dp:{x:288,y:18},w:228,content:[["SOURCE","Central-bank text"],["MODEL","FinBERT + lexicon"],["WEIGHT",wf(W?.nlp,"0.20")],["DRIVERS","tone · hawkish / dovish"]]},
+    {id:"POL", title:"POLITICAL",      dp:{x:155,y:240},w:238,content:[["SOURCE","GDELT · ACLED"],["WEIGHT",wf(W?.political,"0.25")],["DRIVERS","conflict · protests · escalation"]]},
+    {id:"GOV", title:"GOVERNANCE",     dp:{x:418,y:155},w:228,content:[["SOURCE","V-Dem · WJP · FH"],["WEIGHT",wf(W?.governance,"0.10")],["DRIVERS","rule of law · corruption · press"]]},
     {id:"COMP",title:"COMPOSITE ENGINE",dp:{x:55,y:400},w:340,content:[["INPUTS","ECON + NLP + POL + GOV"],["OUTPUT","0–100 risk score"],["CALIB",calib],["REPO","github.com/nenticul/VisibleHand"]]},
   ];
   const [order,setOrder]=useState(WINS.map(w=>w.id));
@@ -901,10 +881,23 @@ function ApiTerminal(){
                   <span className="text-right text-[#101010]">{v}</span>
                 </div>
               ))}
-              <a href="https://github.com/nenticul/VisibleHand" target="_blank" rel="noopener noreferrer"
-                className={`${m} block mt-5 bg-[#101010] text-[#F4F2EA] px-4 py-3 text-[11px] tracking-[0.14em] uppercase hover:bg-[#2A2926] transition-colors duration-[120ms] text-center`}>
-                OPEN REPOSITORY →
+              <a href={`${API_BASE}/docs`} target="_blank" rel="noopener noreferrer"
+                className={`${m} block mt-5 bg-[#8D2F2F] text-[#F4F2EA] px-4 py-3 text-[11px] tracking-[0.14em] uppercase hover:bg-[#732525] transition-colors duration-[120ms] text-center`}>
+                TEST THE API ↗
               </a>
+              <div className="grid grid-cols-2 gap-2 mt-2">
+                <a href={`${API_BASE}/risk/BR`} target="_blank" rel="noopener noreferrer"
+                  className={`${m} border-2 border-[#101010] px-2 py-2 text-[10px] tracking-[0.1em] uppercase text-[#101010] hover:bg-[#101010] hover:text-[#F4F2EA] transition-colors duration-[120ms] text-center`}>
+                  RUN /risk/BR ↗
+                </a>
+                <a href="https://github.com/nenticul/VisibleHand" target="_blank" rel="noopener noreferrer"
+                  className={`${m} border-2 border-[#101010] px-2 py-2 text-[10px] tracking-[0.1em] uppercase text-[#101010] hover:bg-[#101010] hover:text-[#F4F2EA] transition-colors duration-[120ms] text-center`}>
+                  REPOSITORY ↗
+                </a>
+              </div>
+              <div className={`${m} mt-3 text-[9px] tracking-[0.06em] text-[#A09A8E] text-center`}>
+                interactive docs · runs in your browser
+              </div>
             </div>
           </div>
         </div>
@@ -937,11 +930,11 @@ function Numbers(){
           <Stamp text="VALIDATED" color="#8D2F2F" angle={-3}/>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 border-l-2 border-t-2 border-[#101010]">
-          <Metric value={cal?cal.auc:0.81}      dec={2} label="ROC-AUC"          note="Sovereign stress prediction"/>
-          <Metric value={cal?cal.brier:0.14}    dec={2} label="Brier Score"      note="Probabilistic calibration"/>
-          <Metric value={cal?cal.nEvents:147}   dec={0} label="Stress Events"    note="Out-of-sample validation"/>
-          <Metric value={2000} dec={0} label="Backtest Start"   note="26-year test window"/>
-          <Metric value={meta.confidenceFloor??0.91} dec={2} label="Confidence Floor" note="Median file confidence"/>
+          <Metric value={cal?cal.auc:1.0}       dec={2} label="ROC-AUC"          note="Heuristic crisis backtest"/>
+          <Metric value={cal?cal.brier:0.07}    dec={2} label="Brier Score"      note="Probabilistic calibration"/>
+          <Metric value={cal?cal.nEvents:99}    dec={0} label="Stress Events"    note="Out-of-sample validation"/>
+          <Metric value={2000} dec={0} label="Backtest Start"   note="2000–2023 test window"/>
+          <Metric value={meta.confidenceFloor??0.7} dec={2} label="Confidence Floor" note="Median file confidence"/>
           <Metric value={meta.scored??44} dec={0} label="Countries"        note="Live scored universe"/>
         </div>
         <div className="mt-8 border-l-2 border-[#101010] pl-4">
@@ -958,12 +951,12 @@ function Numbers(){
    SOURCES
 ═══════════════════════════════════════════════════════════════════════════ */
 const SRCS=[
-  ["WB-WDI","World Bank WDI","ECONOMIC","500+ development indicators"],["IMF-WEO","IMF World Economic Outlook","MACRO","Fiscal and macro forecasts"],
-  ["BIS","BIS Statistics","FINANCIAL","Cross-border banking flows"],["GDELT-2","GDELT 2.0","NLP/EVENTS","Global event database"],
+  ["WB-WDI","World Bank WDI","ECONOMIC","Development indicators"],["IMF-WEO","IMF World Economic Outlook","MACRO","Fiscal and macro forecasts"],
+  ["BIS","BIS Statistics","FINANCIAL","Cross-border banking flows"],["ILO","ILOSTAT","LABOUR","Employment and labour data"],
+  ["IMF-FSI","IMF Financial Soundness","FINANCIAL","Banking-system indicators"],["GDELT-2","GDELT 2.0","EVENTS","Global event database"],
   ["ACLED","ACLED","CONFLICT","Armed conflict event data"],["V-DEM","V-Dem Institute","GOVERNANCE","Varieties of democracy"],
-  ["UCDP","UCDP","CONFLICT","Uppsala conflict program"],["FH","Freedom House","GOVERNANCE","Freedom in the world index"],
-  ["WGI","World Governance Indicators","GOVERNANCE","World Bank governance data"],["FRED","FRED","FINANCIAL","Federal Reserve economic data"],
-  ["UN-TRADE","UN Comtrade","TRADE","International trade flows"],["UNHCR","UNHCR","CONFLICT","Forced displacement data"],
+  ["WJP","World Justice Project","GOVERNANCE","Rule of Law Index"],["TI-CPI","Transparency Intl","GOVERNANCE","Corruption Perceptions"],
+  ["FH","Freedom House","GOVERNANCE","Freedom in the World"],["UCDP","UCDP","CONFLICT","Uppsala conflict program"],
 ];
 function Sources(){
   return(

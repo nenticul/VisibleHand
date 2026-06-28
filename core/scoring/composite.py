@@ -24,6 +24,7 @@ from core.scoring.political import political_score, PoliticalResult
 from core.scoring.governance import governance_score, GovernanceResult
 from core.scoring.nlp_scorer import nlp_risk_score
 from core.scoring.stats import trend_slope
+from core.scoring.baseline import cross_sectional_economic, BaselineReference
 
 
 @dataclass
@@ -51,6 +52,9 @@ class CompositeResult:
     forecast_6m: dict | None = None
     forecast_12m: dict | None = None
     regime_flags: dict = field(default_factory=dict)
+    mode: str = "temporal"                 # "temporal" | "cross_sectional"
+    peer_group: str | None = None          # populated in cross-sectional mode
+    peer_percentiles: dict | None = None   # per-indicator peer percentile (cross-sectional)
 
 
 # Default component weights (validated via backtesting in Phase 7)
@@ -181,12 +185,34 @@ def compute_composite(
     political_weight: float = DEFAULT_WEIGHTS["political"],
     nlp_weight: float = DEFAULT_WEIGHTS["nlp"],
     governance_weight: float = DEFAULT_WEIGHTS["governance"],
+    mode: str = "temporal",
+    baseline_ref: "BaselineReference | None" = None,
 ) -> dict:
     """
     Returns a dict (backward-compatible) carrying composite, sub-scores, CI,
     driver attributions, forecast, methodology, and components.
+
+    `mode` selects how the economic sub-score is normalised:
+      - "temporal"        : vs the country's own history (robust z-scores).
+      - "cross_sectional" : vs an external peer + anchor baseline (needs
+                            `baseline_ref`). Falls back to temporal if absent.
     """
-    eco = economic_score(indicators, peer_scores=peer_scores)
+    peer_group: str | None = None
+    peer_percentiles: dict | None = None
+
+    if mode == "cross_sectional" and baseline_ref is not None and indicators:
+        latest_values = {m: s[-1] for m, s in indicators.items() if s}
+        xs = cross_sectional_economic(country, latest_values, baseline_ref)
+        eco = EconomicResult(
+            score=xs.score, confidence=xs.confidence, drivers=xs.drivers,
+            components=xs.components, regime_flags={},
+        )
+        peer_group = xs.peer_group
+        peer_percentiles = xs.percentiles
+    else:
+        mode = "temporal"
+        eco = economic_score(indicators, peer_scores=peer_scores)
+
     pol = political_score(events, country=country, neighbour_scores=neighbour_scores)
     nlp_val = nlp_risk_score(nlp_score)
 
@@ -285,7 +311,10 @@ def compute_composite(
         if v is None:
             continue
         if name == "economic":
-            bits.append(f"Economic risk {v:.0f}/100 (weight {share:.0%}, confidence {c:.0%}).")
+            if mode == "cross_sectional" and peer_group:
+                bits.append(f"Economic risk {v:.0f}/100 vs {peer_group} baseline + anchor (weight {share:.0%}).")
+            else:
+                bits.append(f"Economic risk {v:.0f}/100 (weight {share:.0%}, confidence {c:.0%}).")
         elif name == "political":
             bits.append(f"Political risk {v:.0f}/100 from {len(events)} events (weight {share:.0%}).")
         elif name == "nlp":
@@ -320,5 +349,8 @@ def compute_composite(
         forecast_6m=forecast_6m,
         forecast_12m=forecast_12m,
         regime_flags=regime_flags,
+        mode=mode,
+        peer_group=peer_group,
+        peer_percentiles=peer_percentiles,
     )
     return result.__dict__

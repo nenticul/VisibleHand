@@ -44,9 +44,41 @@ class RiskResponse(BaseModel):
         None, description="Score extrapolations: '6m', '12m' horizons"
     )
     regime_flags: Optional[dict[str, Any]] = Field(None, description="Regime detection flags")
+    mode: str = Field(
+        "temporal",
+        description="Measurement mode: 'temporal' (vs own history) or 'cross_sectional' (vs peer + anchor baseline)",
+    )
+    peer_group: Optional[str] = Field(
+        None, description="Peer group used in cross-sectional mode (income ∩ region with fallback)"
+    )
+    peer_percentiles: Optional[dict[str, float]] = Field(
+        None, description="Per-indicator oriented peer percentile (0–100) in cross-sectional mode"
+    )
     updated_at: str
 
     model_config = {"from_attributes": True}
+
+
+class PeerGroupInfo(BaseModel):
+    country: str
+    income_group: Optional[str] = None
+    region: Optional[str] = None
+    peer_group: str
+    peers: list[str] = Field(default_factory=list)
+
+
+class BaselineResponse(BaseModel):
+    """Introspection of the cross-sectional reference distribution."""
+    mode: str = "cross_sectional"
+    n_countries: int
+    anchor_economies: list[str]
+    income_groups: dict[str, str] = Field(description="country → income group code")
+    regions: dict[str, str] = Field(description="country → region")
+    anchor_stats: dict[str, dict[str, float]] = Field(
+        description="metric → {median, mad, n} over the anchor basket"
+    )
+    metric_coverage: dict[str, int] = Field(description="metric → number of countries with data")
+    peer_groups: list[PeerGroupInfo] = Field(default_factory=list)
 
 
 class IndicatorRow(BaseModel):

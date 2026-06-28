@@ -12,10 +12,29 @@ ships with:
 - a list of **top drivers**, and
 - a plain-language **methodology** string.
 
-**Core design principle:** a country is scored against *its own historical
-trajectory*, not a global mean. A developing economy is not penalised for being
-developing; what matters is whether conditions are deteriorating relative to its
-own baseline.
+**Two measurement modes** (`?mode=` on every `/risk` route):
+
+| Mode | Question it answers | How the economic indicators are normalised |
+|------|--------------------|--------------------------------------------|
+| `temporal` *(default)* | "Is this country worse than it usually is?" | robust median/MAD z-score vs the country's **own history** |
+| `cross_sectional` | "How risky is this country vs the rest of the world?" | **peer percentile** (income ∩ region, graceful fallback) blended 60/40 with **robust distance from an anchor basket** of investment-grade benchmark economies |
+
+The temporal mode is exceptional at detecting *regime shifts* but can make a
+chronically-stressed (or chronically-calm) economy look "average" simply because
+today matches its own baseline. The cross-sectional mode fixes this by measuring
+each country against an external standard: in practice Switzerland reads
+*Moderate* temporally (any wobble is large vs its placid history) but correctly
+*Low* cross-sectionally, while a country that is calm-but-globally-extreme reads
+riskier. Both views, the resolved peer group, and every per-indicator percentile
+are returned; the reference distribution is fully introspectable at
+`GET /risk/baseline`. Governance is already cross-sectional in both modes;
+political and NLP are event/text signals that are comparable across countries as-is.
+
+**Core design principle:** in the default (temporal) mode a country is scored
+against *its own historical trajectory*, not a global mean — a developing economy
+is not penalised for being developing; what matters is whether conditions are
+deteriorating relative to its own baseline. The cross-sectional mode is the
+complementary peer-and-anchor view for when you want an absolute standing.
 
 **What changed in v2 (the accuracy upgrade):**
 

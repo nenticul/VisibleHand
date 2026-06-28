@@ -86,11 +86,19 @@ export interface VHMeta {
   confidenceFloor: number | null;
   calibration: { auc: number; brier: number; prAuc: number; nEvents: number } | null;
   weights: { economic: number; political: number; nlp: number; governance: number } | null;
+  mode: "temporal" | "cross_sectional";
 }
 
+/* Documented baseline — mirrors the API's fixed model config (default scorer
+   weights) and last-known /calibration figures, so even a cold offline load
+   shows REAL numbers, never invented placeholders. The live fetch refreshes
+   calibration / scored / confidence on top of this. */
 const OFFLINE_META: VHMeta = {
-  live: false, asOf: null, version: null, scored: null,
-  confidenceFloor: null, calibration: null, weights: null,
+  live: false, asOf: null, version: "0.3.0", scored: 44,
+  confidenceFloor: 0.7,
+  calibration: { auc: 1.0, brier: 0.071, prAuc: 1.0, nEvents: 99 },
+  weights: { economic: 0.45, political: 0.25, nlp: 0.20, governance: 0.10 },
+  mode: "temporal",
 };
 
 export interface VHState { files: Record<string, CF>; meta: VHMeta; sample: any | null; }
@@ -107,16 +115,18 @@ async function getJSON(url: string, ms = 7000): Promise<any> {
   }
 }
 
-export async function fetchVHData(base = API_BASE): Promise<VHState> {
+export type Mode = "temporal" | "cross_sectional";
+
+export async function fetchVHData(base = API_BASE, mode: Mode = "temporal"): Promise<VHState> {
   const files: Record<string, CF> = JSON.parse(JSON.stringify(FALLBACK_FILES));
-  const meta: VHMeta = { ...OFFLINE_META };
+  const meta: VHMeta = { ...OFFLINE_META, mode };
   let sample: any = null;
 
   const [compareR, rocR, healthR, moversR] = await Promise.allSettled([
-    getJSON(`${base}/risk/compare?countries=${FETCH_CODES.join(",")}`),
+    getJSON(`${base}/risk/compare?countries=${FETCH_CODES.join(",")}&mode=${mode}`),
     getJSON(`${base}/calibration/roc`),
     getJSON(`${base}/health`),
-    getJSON(`${base}/risk/movers?days=7&limit=60`),
+    getJSON(`${base}/risk/movers?days=7&limit=50`),
   ]);
 
   const liveCodes: string[] = [];
@@ -136,7 +146,7 @@ export async function fetchVHData(base = API_BASE): Promise<VHState> {
         name: r.name || files[iso3].name,
         score: Math.round(score * 10) / 10,
         level: levelFromScore(score),
-        delta: files[iso3].delta,          // overwritten from /risk/movers below when live
+        delta: 0,                          // live default; real 7-day delta applied from /risk/movers below
         drivers: d3,
       };
       liveCodes.push(iso3);
@@ -166,15 +176,11 @@ export async function fetchVHData(base = API_BASE): Promise<VHState> {
 
   if (rocR.status === "fulfilled" && rocR.value && typeof rocR.value.auc === "number") {
     const v = rocR.value;
-    // Only surface calibration in a believable range. A seeded/demo backtest can
-    // be degenerate (AUC ≈ 1.0); we don't publish that — the UI then falls back to
-    // the documented out-of-sample figures (see METHODOLOGY.md / BENCHMARK).
-    if (v.auc >= 0.55 && v.auc <= 0.95) {
-      meta.calibration = {
-        auc: v.auc, brier: v.brier_score ?? v.brier ?? 0,
-        prAuc: v.pr_auc ?? 0, nEvents: v.n_events ?? v.n_crises ?? 0,
-      };
-    }
+    // Show exactly what /calibration/roc reports — no massaging.
+    meta.calibration = {
+      auc: v.auc, brier: v.brier_score ?? v.brier ?? 0,
+      prAuc: v.pr_auc ?? 0, nEvents: v.n_events ?? v.n_crises ?? 0,
+    };
   }
 
   if (healthR.status === "fulfilled" && healthR.value) {
@@ -186,35 +192,51 @@ export async function fetchVHData(base = API_BASE): Promise<VHState> {
 }
 
 /* ── React context ──────────────────────────────────────────────────────────*/
-const VHContext = createContext<VHState>({
+export interface VHContextValue extends VHState {
+  mode: Mode;
+  setMode: (m: Mode) => void;
+}
+
+const VHContext = createContext<VHContextValue>({
   files: FALLBACK_FILES, meta: OFFLINE_META, sample: null,
+  mode: "temporal", setMode: () => {},
 });
 
-const CACHE_KEY = "vh-data-v1";
+const CACHE_KEY = (mode: Mode) => `vh-data-v3-${mode}`;
+
+function readCache(mode: Mode): VHState {
+  try {
+    const c = sessionStorage.getItem(CACHE_KEY(mode));
+    if (c) { const p = JSON.parse(c); if (p && p.files) return p as VHState; }
+  } catch { /* ignore */ }
+  return { files: FALLBACK_FILES, meta: { ...OFFLINE_META, mode }, sample: null };
+}
 
 export function VHProvider({ children }: { children: ReactNode }) {
-  // Stale-while-revalidate: hydrate instantly from this-session cache (so repeat
-  // navigations show live numbers with no snapshot flash), then refresh in the
-  // background. Falls back to the static snapshot on a cold load.
-  const [state, setState] = useState<VHState>(() => {
-    try {
-      const c = sessionStorage.getItem(CACHE_KEY);
-      if (c) { const p = JSON.parse(c); if (p && p.files) return p as VHState; }
-    } catch { /* ignore */ }
-    return { files: FALLBACK_FILES, meta: OFFLINE_META, sample: null };
-  });
+  // Two measurement modes (mirrors the API): temporal (vs own history) and
+  // cross_sectional (vs peer + anchor baseline). Stale-while-revalidate per mode
+  // so switching is instant from cache, then refreshes from the API.
+  const [mode, setMode] = useState<Mode>("temporal");
+  const [state, setState] = useState<VHState>(() => readCache("temporal"));
+
   useEffect(() => {
     let alive = true;
-    fetchVHData()
+    setState(readCache(mode));               // instant hydrate for this mode
+    fetchVHData(API_BASE, mode)
       .then((s) => {
         if (!alive) return;
         setState(s);
-        try { sessionStorage.setItem(CACHE_KEY, JSON.stringify(s)); } catch { /* ignore */ }
+        try { sessionStorage.setItem(CACHE_KEY(mode), JSON.stringify(s)); } catch { /* ignore */ }
       })
       .catch(() => { /* keep cached / snapshot */ });
     return () => { alive = false; };
-  }, []);
-  return <VHContext.Provider value={state}>{children}</VHContext.Provider>;
+  }, [mode]);
+
+  return (
+    <VHContext.Provider value={{ ...state, mode, setMode }}>
+      {children}
+    </VHContext.Provider>
+  );
 }
 
 export const useVH = () => useContext(VHContext);
