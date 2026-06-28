@@ -7,7 +7,8 @@ from alembic import context
 from api.models.database import Base
 
 config = context.config
-database_url = os.environ.get("DATABASE_URL")
+
+database_url = os.environ.get("DATABASE_URL", "")
 if not database_url:
     raise RuntimeError(
         "DATABASE_URL environment variable is not set. "
