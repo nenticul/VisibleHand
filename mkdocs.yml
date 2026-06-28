@@ -1,0 +1,80 @@
+site_name: VisibleHand
+site_description: Open political-economic country risk scoring API
+site_author: VisibleHand Contributors
+site_url: https://visiblehand.readthedocs.io
+repo_url: https://github.com/YOUR_USERNAME/visiblehand
+repo_name: visiblehand
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - search.highlight
+    - content.code.copy
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            show_source: true
+            docstring_style: google
+
+markdown_extensions:
+  - admonition
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Quickstart: getting-started/quickstart.md
+    - Installation: getting-started/installation.md
+    - Configuration: getting-started/configuration.md
+  - API Reference:
+    - Risk Scoring: api/risk.md
+    - Governance: api/governance.md
+    - NLP / Aspects: api/nlp.md
+    - Calibration: api/calibration.md
+    - Health & Metrics: api/health.md
+  - Methodology:
+    - Overview: methodology/overview.md
+    - Economic V3: methodology/economic.md
+    - Political V3: methodology/political.md
+    - Governance Scorer: methodology/governance.md
+    - NLP Scorer: methodology/nlp.md
+    - Composite & CI: methodology/composite.md
+    - Calibration: methodology/calibration.md
+  - SDK:
+    - Python SDK: sdk/python.md
+  - Data Sources: data-sources.md
+  - Terms of Use: terms-of-use.md
+  - Contributing: contributing.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/YOUR_USERNAME/visiblehand

@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/anest/AppData/Roaming/Claude/local-agent-mode-sessions/skills-plugin/1a8bb6f6-b1e7-4094-8b43-f7b68256e883/e98a3c47-75a4-4d17-8450-8a9b2602fec3/skills/docx/**)",
+      "Bash(extract-text \"C:\\\\Users\\\\anest\\\\Downloads\\\\VisibleHand_Build_Guide.docx\")",
+      "Bash(python scripts/office/unpack.py \"C:\\\\Users\\\\anest\\\\Downloads\\\\VisibleHand_Build_Guide.docx\" /tmp/vh_unpacked/)",
+      "PowerShell(Add-Type -AssemblyName System.IO.Compression.FileSystem; $zip = [System.IO.Compression.ZipFile]::OpenRead\\(\"C:\\\\Users\\\\anest\\\\Downloads\\\\VisibleHand_Build_Guide.docx\"\\); $entry = $zip.Entries | Where-Object { $_.FullName -eq \"word/document.xml\" }; $reader = New-Object System.IO.StreamReader\\($entry.Open\\(\\)\\); $content = $reader.ReadToEnd\\(\\); $reader.Close\\(\\); $zip.Dispose\\(\\); $content)",
+      "PowerShell(Head -50)",
+      "PowerShell(python3 --version)",
+      "PowerShell(pip3 --version)",
+      "PowerShell(Get-Command py -ErrorAction SilentlyContinue)",
+      "PowerShell(py --version)",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\anest\\\\Downloads\\\\VisibleHand\" -Recurse | Where-Object { -not $_.PSIsContainer } | Select-Object -ExpandProperty FullName | ForEach-Object { $_.Replace\\(\"C:\\\\Users\\\\anest\\\\Downloads\\\\VisibleHand\\\\\", \"\"\\) } | Sort-Object)",
+      "PowerShell($py = \"C:\\\\Users\\\\anest\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python312\\\\python.exe\"; & $py --version; & $py -c \"print\\('python works'\\)\")",
+      "PowerShell($py = \"C:\\\\Users\\\\anest\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python312\\\\python.exe\"; cd \"C:\\\\Users\\\\anest\\\\Downloads\\\\VisibleHand\"; & $py -m compileall -q api core sdk scripts tests 2>&1 | Select-Object -First 40)",
+      "PowerShell($py = \"C:\\\\Users\\\\anest\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python312\\\\python.exe\"; cd \"C:\\\\Users\\\\anest\\\\Downloads\\\\VisibleHand\"; & $py -m venv .venv; .\\\\.venv\\\\Scripts\\\\python.exe -m pip install --quiet --upgrade pip 2>&1 | Select-Object -Last 3)",
+      "PowerShell(docker --version)",
+      "PowerShell(docker compose version)"
+    ]
+  }
+}
