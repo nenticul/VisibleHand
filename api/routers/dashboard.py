@@ -1,11 +1,11 @@
-"""
-Dashboard — Mac OS System 6/7 / HyperCard aesthetic.
+﻿"""
+Dashboard â€” Mac OS System 6/7 / HyperCard aesthetic.
 Routes:
-  GET /                  — landing page
-  GET /dashboard         — risk heatmap
-  GET /dashboard/{code}  — country detail
-  GET /methodology       — methodology & calibration (HTML)
-  GET /api               — API reference (HTML)
+  GET /                  â€” landing page
+  GET /dashboard         â€” risk heatmap
+  GET /dashboard/{code}  â€” country detail
+  GET /methodology       â€” methodology & calibration (HTML)
+  GET /api               â€” API reference (HTML)
 """
 
 import json
@@ -48,7 +48,7 @@ def _risk_label(v):
 
 
 def _risk_dc(v):
-    """CSS dither class — density encodes risk level."""
+    """CSS dither class â€” density encodes risk level."""
     if v is None or v < 20: return "dvl"
     if v < 40: return "dlo"
     if v < 60: return "dmd"
@@ -57,10 +57,10 @@ def _risk_dc(v):
 
 
 def _fmt(v):
-    return f"{v:.1f}" if v is not None else "—"
+    return f"{v:.1f}" if v is not None else "â€”"
 
 
-# ── Geography (approx centroids) + region grouping for the ASCII terminal ─────
+# â”€â”€ Geography (approx centroids) + region grouping for the ASCII terminal â”€â”€â”€â”€â”€
 GEO: dict[str, tuple[float, float, str]] = {
     "US": (38, -97, "N. America"),  "CA": (56, -106, "N. America"), "MX": (23, -102, "N. America"),
     "BR": (-10, -55, "S. America"), "AR": (-34, -64, "S. America"), "CO": (4, -72, "S. America"),
@@ -95,7 +95,7 @@ def _band_cls(v) -> str:
 def _ascii_bar(v, width: int = 22) -> str:
     val = 0.0 if v is None else max(0.0, min(100.0, float(v)))
     fill = int(round(val / 100 * width))
-    return "█" * fill + "░" * (width - fill)
+    return "â–ˆ" * fill + "â–‘" * (width - fill)
 
 
 def _latest_per_country(rows: list) -> list:
@@ -126,7 +126,7 @@ def _detect_movers(rows: list, days: int = 7) -> list:
     return movers[:5]
 
 
-# ── CSS ────────────────────────────────────────────────────────────────────────
+# â”€â”€ CSS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 _STYLE = """
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -139,17 +139,17 @@ body{
   min-height:100vh;
 }
 
-/* ── Dither fills (density = risk level) ── */
+/* â”€â”€ Dither fills (density = risk level) â”€â”€ */
 .dvl{background:#fff}
 .dlo{background:#fff;background-image:radial-gradient(#000 1px,transparent 0);background-size:4px 4px}
 .dmd{background:conic-gradient(#000 25%,#fff 0 50%,#000 50% 75%,#fff 75%);background-size:4px 4px}
 .dhi{background:#000;background-image:radial-gradient(#fff 1.2px,transparent 0);background-size:4px 4px}
 .dvh{background:#000}
 
-/* ── Titlebar pinstripe ── */
+/* â”€â”€ Titlebar pinstripe â”€â”€ */
 .stripe{background:repeating-linear-gradient(to bottom,#000 0,#000 1px,#fff 1px,#fff 2px)}
 
-/* ── Menu bar ── */
+/* â”€â”€ Menu bar â”€â”€ */
 .menubar{
   position:sticky;top:0;z-index:200;
   background:#fff;border-bottom:1px solid #000;
@@ -161,13 +161,13 @@ body{
 .mi:hover{background:#000;color:#fff}
 .mi-r{margin-left:auto;font-weight:normal;font-size:10px;color:#555;cursor:default}
 
-/* ── Desktop ── */
+/* â”€â”€ Desktop â”€â”€ */
 .desktop{
   padding:14px;display:flex;flex-direction:column;
   align-items:center;min-height:calc(100vh - 20px);
 }
 
-/* ── Window ── */
+/* â”€â”€ Window â”€â”€ */
 .window{
   background:#fff;border:1px solid #000;
   box-shadow:2px 2px 0 #000;
@@ -175,7 +175,7 @@ body{
   display:flex;flex-direction:column;
 }
 
-/* ── Title bar ── */
+/* â”€â”€ Title bar â”€â”€ */
 .titlebar{
   flex:none;height:19px;border-bottom:1px solid #000;
   display:flex;align-items:center;padding:0 3px;gap:3px;
@@ -198,7 +198,7 @@ body{
   font-size:8px;font-weight:bold;
 }
 
-/* ── Status bar ── */
+/* â”€â”€ Status bar â”€â”€ */
 .statbar{
   flex:none;background:#fff;border-bottom:1px solid #000;
   padding:3px 8px;display:flex;justify-content:space-between;
@@ -211,7 +211,7 @@ body{
 }
 @keyframes bl{0%,100%{opacity:1}50%{opacity:.1}}
 
-/* ── Legend ── */
+/* â”€â”€ Legend â”€â”€ */
 .legend{
   flex:none;display:flex;gap:14px;flex-wrap:wrap;
   padding:4px 8px;border-bottom:1px solid #000;
@@ -220,7 +220,7 @@ body{
 .lg{display:flex;align-items:center;gap:4px}
 .lsw{display:inline-block;width:12px;height:8px;border:1px solid #000;flex:none}
 
-/* ── Alert ── */
+/* â”€â”€ Alert â”€â”€ */
 .alert{
   flex:none;border-bottom:1px solid #000;padding:4px 8px;
   font-size:11px;font-weight:bold;
@@ -228,7 +228,7 @@ body{
   background-size:4px 4px;
 }
 
-/* ── Table ── */
+/* â”€â”€ Table â”€â”€ */
 .tbl-wrap{flex:1;overflow-x:auto}
 table{width:100%;border-collapse:collapse;min-width:820px}
 
@@ -282,18 +282,18 @@ a:hover{text-decoration:underline}
 .chips{display:flex;flex-wrap:wrap;gap:2px;max-width:200px}
 .chip{border:1px solid #000;padding:0 4px;font-size:9px;background:#fff;white-space:nowrap}
 
-/* ── Footer strip ── */
+/* â”€â”€ Footer strip â”€â”€ */
 .winfooter{
   flex:none;border-top:1px solid #aaa;background:#e8e8e8;
   padding:3px 8px;font-size:10px;color:#555;
   display:flex;justify-content:space-between;
 }
 
-/* ── Empty state ── */
+/* â”€â”€ Empty state â”€â”€ */
 .empty{text-align:center;padding:40px;font-size:12px;color:#555}
 .empty code{border:1px solid #aaa;padding:0 4px;background:#f8f8f8;font-family:Monaco,monospace;font-size:10px}
 
-/* ── Tab bar (HyperCard) ── */
+/* â”€â”€ Tab bar (HyperCard) â”€â”€ */
 .tabbar{
   flex:none;border-top:2px solid #000;background:#808080;
   display:flex;gap:2px;padding:4px 6px 0;flex-wrap:wrap;
@@ -306,7 +306,7 @@ a:hover{text-decoration:underline}
 .tab:hover,.tab.on{background:#000;color:#fff}
 .tab-gap{flex:1}
 
-/* ── Detail page ── */
+/* â”€â”€ Detail page â”€â”€ */
 .d-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));border-bottom:1px solid #000}
 .d-panel{border-right:1px solid #aaa;border-bottom:1px solid #aaa;padding:10px}
 .d-ptitle{font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:.04em;
@@ -322,7 +322,7 @@ svg.sparkline{display:block;width:100%}
 .dl-bar{border-top:1px solid #aaa;background:#e8e8e8;padding:4px 8px;display:flex;gap:14px;flex-wrap:wrap}
 .dl-bar a{font-size:11px;color:#000}
 
-/* ── Shared content sections ── */
+/* â”€â”€ Shared content sections â”€â”€ */
 .m-sect{border-bottom:1px solid #ccc}
 .m-sect:last-child{border-bottom:none}
 .m-sect-hdr{
@@ -370,7 +370,7 @@ svg.sparkline{display:block;width:100%}
 .band-desc{color:#555;font-size:11px}
 .scrollable{overflow-y:auto;max-height:480px}
 
-/* ── Landing page ── */
+/* â”€â”€ Landing page â”€â”€ */
 .hero{display:grid;grid-template-columns:1fr 1fr;gap:0;border-bottom:1px solid #000}
 .hero-l{padding:20px;border-right:1px solid #000}
 .hero-h1{font-size:22px;font-weight:bold;line-height:1.2;margin-bottom:6px}
@@ -406,8 +406,8 @@ svg.sparkline{display:block;width:100%}
 .fc:nth-child(3n){border-right:none}
 .fc:nth-last-child(-n+3){border-bottom:none}
 .fc-h{font-size:11px;font-weight:bold;margin-bottom:5px}
-.fc-h::before{content:"□ "}
-.fc:hover .fc-h::before{content:"■ "}
+.fc-h::before{content:"â–¡ "}
+.fc:hover .fc-h::before{content:"â–  "}
 .fc:hover{background:#f8f8f8}
 .fc-p{font-size:11px;color:#444;line-height:1.5}
 
@@ -476,7 +476,7 @@ def _row_html(r) -> str:
             pass
     chips = "".join(f'<span class="chip">{d.replace("_"," ")}</span>' for d in drivers[:3])
     if not chips:
-        chips = '<span class="chip" style="opacity:.4">—</span>'
+        chips = '<span class="chip" style="opacity:.4">â€”</span>'
 
     def bar(v):
         dclass = _risk_dc(v)
@@ -487,9 +487,9 @@ def _row_html(r) -> str:
 
     ci_str = ""
     if r.ci_low is not None and r.ci_high is not None:
-        ci_str = f'<span class="ci-s">[{r.ci_low:.0f}–{r.ci_high:.0f}]</span>'
+        ci_str = f'<span class="ci-s">[{r.ci_low:.0f}â€“{r.ci_high:.0f}]</span>'
 
-    date_str = r.computed_at.date().isoformat() if r.computed_at else "—"
+    date_str = r.computed_at.date().isoformat() if r.computed_at else "â€”"
     conf_pct = int((r.confidence or 0) * 100)
 
     return f"""<tr>
@@ -536,13 +536,13 @@ def _build_dashboard(rows: list, history_rows: list | None = None) -> str:
 
     if not latest:
         body = ('<tr><td colspan="10"><div class="empty">'
-                'No scores yet — seed: <code>python -m scripts.seed_demo_data</code>'
+                'No scores yet â€” seed: <code>python -m scripts.seed_demo_data</code>'
                 '&nbsp;&nbsp;then call:&nbsp;&nbsp;<code>/risk/compare?countries=US,BR,AR</code>'
                 '</div></td></tr>')
         stat_text = "No data"
     else:
         body = "".join(_row_html(r) for r in latest)
-        hl = f"{highest.country_code} {highest.composite:.0f}" if highest else "—"
+        hl = f"{highest.country_code} {highest.composite:.0f}" if highest else "â€”"
         stat_text = f"{n} items&nbsp;&nbsp;&#183;&nbsp;&nbsp;avg risk {avg:.1f}&nbsp;&nbsp;&#183;&nbsp;&nbsp;highest&nbsp;{hl}"
 
     _TABS = [
@@ -551,12 +551,12 @@ def _build_dashboard(rows: list, history_rows: list | None = None) -> str:
         ("", ""), ("Exit", "/"),
     ]
 
-    return _head("VisibleHand — Risk Monitor") + f"""
+    return _head("VisibleHand â€” Risk Monitor") + f"""
 <body>
 {_menubar(["File","Edit","View","Sort"])}
 <div class="desktop">
 <div class="window">
-{_titlebar("VisibleHand Risk Monitor — Live", "/")}
+{_titlebar("VisibleHand Risk Monitor â€” Live", "/")}
 <div class="statbar">
   <span><span class="ldot"></span>{stat_text}</span>
   <span style="color:#555">auto-refresh 2 min</span>
@@ -565,9 +565,9 @@ def _build_dashboard(rows: list, history_rows: list | None = None) -> str:
 <div class="legend">
   <span style="font-weight:bold">Risk fill:</span>
   <span class="lg"><span class="lsw dvl"></span>Very Low (&lt;20)</span>
-  <span class="lg"><span class="lsw dlo"></span>Low (20–39)</span>
-  <span class="lg"><span class="lsw dmd"></span>Moderate (40–59)</span>
-  <span class="lg"><span class="lsw dhi"></span>High (60–74)</span>
+  <span class="lg"><span class="lsw dlo"></span>Low (20â€“39)</span>
+  <span class="lg"><span class="lsw dmd"></span>Moderate (40â€“59)</span>
+  <span class="lg"><span class="lsw dhi"></span>High (60â€“74)</span>
   <span class="lg"><span class="lsw dvh"></span>Very High / Critical (75+)</span>
 </div>
 <div class="tbl-wrap">
@@ -588,7 +588,7 @@ def _build_dashboard(rows: list, history_rows: list | None = None) -> str:
 </table>
 </div>
 <div class="winfooter">
-  <span>Sources: World Bank · IMF · BIS · GDELT/ACLED · V-Dem · WJP · TI · Freedom House · NLP</span>
+  <span>Sources: World Bank Â· IMF Â· BIS Â· GDELT/ACLED Â· V-Dem Â· WJP Â· TI Â· Freedom House Â· NLP</span>
   <a href="/methodology">Methodology</a>
 </div>
 {_tabbar([("Browse","/"),("Dashboard","/dashboard"),("World","/world"),("Terminal","/terminal"),("API","/api"),("",""),("Exit","/")], active="Dashboard")}
@@ -612,11 +612,11 @@ function sT(col,txt){{
 
 def _build_detail(code: str, rows: list, stmt) -> str:
     if not rows:
-        return _head(f"{code} — VisibleHand") + f"""
+        return _head(f"{code} â€” VisibleHand") + f"""
 <body>
 {_menubar(["File","Edit","Go"])}
 <div class="desktop"><div class="window">
-{_titlebar(f"VisibleHand — {code} — No Data", "/dashboard")}
+{_titlebar(f"VisibleHand â€” {code} â€” No Data", "/dashboard")}
 <div style="padding:24px;font-size:12px">
   <a href="/dashboard" style="color:#000">&#x25C2; Back to Dashboard</a><br><br>
   No scores for {code} yet. Call <code>/risk/{code}</code> to compute the first score.
@@ -662,7 +662,7 @@ def _build_detail(code: str, rows: list, stmt) -> str:
 
     ci_str = ""
     if latest.ci_low is not None and latest.ci_high is not None:
-        ci_str = f'<span style="font-size:10px;color:#555"> [{latest.ci_low:.1f}–{latest.ci_high:.1f}]</span>'
+        ci_str = f'<span style="font-size:10px;color:#555"> [{latest.ci_low:.1f}â€“{latest.ci_high:.1f}]</span>'
 
     forecast_html = ""
     if latest.forecast_6m:
@@ -670,10 +670,10 @@ def _build_detail(code: str, rows: list, stmt) -> str:
             f6 = json.loads(latest.forecast_6m)
             f12 = json.loads(latest.forecast_12m) if latest.forecast_12m else None
             forecast_html = '<div class="d-panel"><div class="d-ptitle">Forecast (extrapolation)</div>'
-            forecast_html += f'<div class="d-row"><span class="d-label">6 months</span><span class="d-val">{f6["composite"]:.1f} [{f6["ci_low"]:.0f}–{f6["ci_high"]:.0f}]</span></div>'
+            forecast_html += f'<div class="d-row"><span class="d-label">6 months</span><span class="d-val">{f6["composite"]:.1f} [{f6["ci_low"]:.0f}â€“{f6["ci_high"]:.0f}]</span></div>'
             if f12:
-                forecast_html += f'<div class="d-row"><span class="d-label">12 months</span><span class="d-val">{f12["composite"]:.1f} [{f12["ci_low"]:.0f}–{f12["ci_high"]:.0f}]</span></div>'
-            forecast_html += '<p style="font-size:10px;color:#888;margin-top:6px">Theil-Sen extrapolation — not a prediction.</p></div>'
+                forecast_html += f'<div class="d-row"><span class="d-label">12 months</span><span class="d-val">{f12["composite"]:.1f} [{f12["ci_low"]:.0f}â€“{f12["ci_high"]:.0f}]</span></div>'
+            forecast_html += '<p style="font-size:10px;color:#888;margin-top:6px">Theil-Sen extrapolation â€” not a prediction.</p></div>'
         except Exception:
             pass
 
@@ -682,18 +682,18 @@ def _build_detail(code: str, rows: list, stmt) -> str:
         s = stmt.sentiment_score or 50
         s_label = "HAWKISH" if s >= 65 else ("NEUTRAL" if s >= 40 else "DOVISH")
         stmt_html = (f'<div class="d-panel"><div class="d-ptitle">Central Bank Signal ({stmt.bank_name})</div>'
-                     f'<div class="d-row"><span class="d-label">Sentiment</span><span class="d-val">{s:.0f}/100 · {s_label}</span></div>'
-                     f'<div class="d-row"><span class="d-label">Date</span><span class="d-val">{stmt.statement_date or "—"}</span></div>'
+                     f'<div class="d-row"><span class="d-label">Sentiment</span><span class="d-val">{s:.0f}/100 Â· {s_label}</span></div>'
+                     f'<div class="d-row"><span class="d-label">Date</span><span class="d-val">{stmt.statement_date or "â€”"}</span></div>'
                      f'<p style="margin-top:8px;font-size:10px;color:#555;line-height:1.55;font-style:italic">'
                      f'&ldquo;{(stmt.raw_text or "")[:240]}&hellip;&rdquo;</p></div>')
 
-    date_str = latest.computed_at.date().isoformat() if latest.computed_at else "—"
+    date_str = latest.computed_at.date().isoformat() if latest.computed_at else "â€”"
 
-    return _head(f"{code} Risk — VisibleHand") + f"""
+    return _head(f"{code} Risk â€” VisibleHand") + f"""
 <body>
 {_menubar(["File","Edit","Go"])}
 <div class="desktop"><div class="window">
-{_titlebar(f"VisibleHand — {name} ({code}) — Country Risk Detail", "/dashboard")}
+{_titlebar(f"VisibleHand â€” {name} ({code}) â€” Country Risk Detail", "/dashboard")}
 <div class="statbar">
   <span><a href="/dashboard" style="color:#000">&#x25C2; All countries</a>&nbsp;&nbsp;&#183;&nbsp;&nbsp;{name}&nbsp;({code})</span>
   <span style="color:#555">{date_str}&nbsp;&nbsp;&#183;&nbsp;&nbsp;confidence {int((latest.confidence or 0)*100)}%</span>
@@ -747,7 +747,7 @@ def _build_detail(code: str, rows: list, stmt) -> str:
 @router.get("/dashboard", response_class=HTMLResponse, include_in_schema=False)
 async def dashboard(db: Session = Depends(get_db)) -> HTMLResponse:
     from sqlalchemy import func
-    # Latest snapshot per country — robust no matter how many total snapshots
+    # Latest snapshot per country â€” robust no matter how many total snapshots
     # have accumulated (a plain limit() can silently drop countries).
     sub = (
         db.query(
@@ -792,9 +792,9 @@ async def country_detail(country_code: str, db: Session = Depends(get_db)) -> HT
     return HTMLResponse(_build_detail(code, rows, stmt))
 
 
-# ── VH-WSM World-State page ──────────────────────────────────────────────────
+# â”€â”€ VH-WSM World-State page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-# ── Data-viz helpers (vintage palette, inline SVG) ───────────────────────────
+# â”€â”€ Data-viz helpers (vintage palette, inline SVG) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 _VIZ_PALETTE = ["#5d7c4f", "#8f9a45", "#cf9f24", "#c2702a", "#a8322f"]  # vlow..vhigh
 _HAZARD_ORDER = ["sovereign_default", "currency_crisis", "imf_programme",
                  "banking_crisis", "civil_conflict", "coup",
@@ -921,7 +921,7 @@ def _build_worldstate(code: str, st: dict) -> str:
     an_rows = ""
     for a in st.get("nearest_analogues", []):
         out = a.get("outcome_12m")
-        out_html = (f'<span class="badge del">{out}</span>' if out else '<span style="color:#999">—</span>')
+        out_html = (f'<span class="badge del">{out}</span>' if out else '<span style="color:#999">â€”</span>')
         an_rows += (f'<tr><td>{a["rank"]}</td>'
                     f'<td class="mono"><a href="/worldstate/{a["country"]}">{a["country"]}</a></td>'
                     f'<td class="mono">{a["date"]}</td>'
@@ -943,24 +943,24 @@ def _build_worldstate(code: str, st: dict) -> str:
         sp_rows += f'<div class="d-row"><span class="d-label">{kk.replace("_"," ")}</span>{disp}</div>'
 
     conf = bs.get("confidence")
-    conf_txt = f"{conf:.2f}" if isinstance(conf, (int, float)) else "—"
-    cf_txt = f"[{cf[0]:.1f}, {cf[1]:.1f}]" if cf else "—"
+    conf_txt = f"{conf:.2f}" if isinstance(conf, (int, float)) else "â€”"
+    cf_txt = f"[{cf[0]:.1f}, {cf[1]:.1f}]" if cf else "â€”"
     cov = unc.get("empirical_coverage")
     abstain = unc.get("abstain")
     abstain_html = (
-        f'<div class="infobox warn">&#9888; ABSTAIN — {"; ".join(unc.get("abstain_reasons", []))}</div>'
+        f'<div class="infobox warn">&#9888; ABSTAIN â€” {"; ".join(unc.get("abstain_reasons", []))}</div>'
         if abstain else
         '<div class="infobox">Output is within confidence thresholds (no abstention).</div>'
     )
 
     def comp_cell(v):
-        return f"{v:.1f}" if isinstance(v, (int, float)) else "—"
+        return f"{v:.1f}" if isinstance(v, (int, float)) else "â€”"
 
-    return _head(f"World-State — {name}") + f"""
+    return _head(f"World-State â€” {name}") + f"""
 <body>
 {_menubar(["File","Edit","Go"])}
 <div class="desktop"><div class="window">
-{_titlebar(f"VisibleHand World-State — {name}", "/dashboard")}
+{_titlebar(f"VisibleHand World-State â€” {name}", "/dashboard")}
 <div class="statbar">
   <span><span class="ldot"></span>{meta.get('model_version')} &#183; cutoff {meta.get('data_cutoff')} &#183;
   cluster <b>{ws.get('cluster') or 'n/a'}</b> &#183; data-quality {meta.get('data_quality_score')}</span>
@@ -980,7 +980,7 @@ def _build_worldstate(code: str, st: dict) -> str:
     <div style="padding:4px">
       <div class="d-row"><span class="d-label">Confidence</span><span class="d-val">{conf_txt}</span></div>
       <div class="d-row"><span class="d-label">Conformal 90%</span><span class="d-val">{cf_txt}</span></div>
-      <div class="d-row"><span class="d-label">Coverage</span><span class="d-val">{cov if cov is not None else '—'}</span></div>
+      <div class="d-row"><span class="d-label">Coverage</span><span class="d-val">{cov if cov is not None else 'â€”'}</span></div>
       <div class="d-row"><span class="d-label">State cluster</span><span class="d-val">{ws.get('cluster') or 'n/a'} ({(ws.get('cluster_confidence') or 0):.2f})</span></div>
       <div style="margin-top:6px">{abstain_html}</div>
     </div>
@@ -1001,10 +1001,10 @@ def _build_worldstate(code: str, st: dict) -> str:
   <div class="m-sect-body">
   <div class="two-col">
     <div style="text-align:center;padding:6px">{radar}
-      <div style="font-size:10px;color:#666">probability radar (0–100%)</div></div>
+      <div style="font-size:10px;color:#666">probability radar (0â€“100%)</div></div>
     <div style="padding:6px"><table class="m-tbl"><tbody>{haz_rows}</tbody></table></div>
   </div>
-  <p style="font-size:10px;color:#888;margin-top:6px">Experimental (heuristic-served) — see
+  <p style="font-size:10px;color:#888;margin-top:6px">Experimental (heuristic-served) â€” see
   <a href="/model/leaderboard">/model/leaderboard</a> &amp; BENCHMARK_vh_wsm_0.1.md.</p>
   </div></div>
 
@@ -1041,7 +1041,7 @@ async def worldstate_page(country_code: str, db: Session = Depends(get_db)) -> H
     st = wsm_service.build_state(db, code)
     if st is None:
         return HTMLResponse(
-            _head("World-State — n/a") +
+            _head("World-State â€” n/a") +
             f'<body><div class="desktop"><div class="window">'
             f'{_titlebar("VisibleHand World-State", "/dashboard")}'
             f'<div style="padding:20px">No world-state data for {code}. '
@@ -1052,7 +1052,7 @@ async def worldstate_page(country_code: str, db: Session = Depends(get_db)) -> H
     return HTMLResponse(_build_worldstate(code, st))
 
 
-# ── World overview: state-space map + clusters + contagion network ───────────
+# â”€â”€ World overview: state-space map + clusters + contagion network â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 _CLUSTER_PALETTE = ["#3a5a8c", "#8c5a3a", "#4f7c5d", "#8c3a6a", "#7c6a3a", "#5a5a8c",
                     "#6a8c3a", "#8c3a3a"]
@@ -1116,7 +1116,7 @@ def _svg_network(nodes: list[dict], edges: list[tuple], size: int = 540) -> str:
 
 
 def _risk_legend() -> str:
-    labels = [("&lt;20", 0), ("20–39", 1), ("40–59", 2), ("60–74", 3), ("75+", 4)]
+    labels = [("&lt;20", 0), ("20â€“39", 1), ("40â€“59", 2), ("60â€“74", 3), ("75+", 4)]
     items = "".join(
         f'<span style="display:inline-flex;align-items:center;gap:4px;margin-right:10px">'
         f'<span style="width:11px;height:11px;background:{_VIZ_PALETTE[i]};'
@@ -1148,18 +1148,18 @@ def _build_world(points, clusters, regional, nodes, edges, as_of) -> str:
                      f'<span style="flex:1;margin:0 8px">{_haz_bar(mean/100)}</span>'
                      f'<span class="d-val">{mean:.1f}</span></div>')
 
-    return _head("World Map — VisibleHand") + f"""
+    return _head("World Map â€” VisibleHand") + f"""
 <body>
 {_menubar(["File","Edit","View"])}
 <div class="desktop"><div class="window">
-{_titlebar("VisibleHand — Global State Map", "/")}
+{_titlebar("VisibleHand â€” Global State Map", "/")}
 <div class="statbar">
   <span><span class="ldot"></span>{len(points)} country-states &#183; embedding vh-wsm-pca-0.1 &#183; {as_of}</span>
   <a href="/world/graph" style="font-size:10px">graph JSON &#x25B8;</a>
 </div>
 <div class="scrollable">
 
-<div class="m-sect"><div class="m-sect-hdr">State-Space Map — PCA(2) of country embeddings</div>
+<div class="m-sect"><div class="m-sect-hdr">State-Space Map â€” PCA(2) of country embeddings</div>
   <div class="m-sect-body">
     <div class="infobox">Each point is a country's current <b>world state</b> projected to two
     dimensions. Neighbouring points are in similar political-economic states. Colour = risk band,
@@ -1174,7 +1174,7 @@ def _build_world(points, clusters, regional, nodes, edges, as_of) -> str:
 <div class="m-sect"><div class="m-sect-hdr">Regional Risk</div>
   <div class="m-sect-body">{reg_html}</div></div>
 
-<div class="m-sect"><div class="m-sect-hdr">Contagion Network — strong trade links</div>
+<div class="m-sect"><div class="m-sect-hdr">Contagion Network â€” strong trade links</div>
   <div class="m-sect-body" style="text-align:center">
     <div class="infobox" style="text-align:left">Nodes are countries (colour = risk), arranged by
     region; edges are major trade relationships through which shocks can propagate.</div>
@@ -1210,9 +1210,9 @@ async def world_page(db: Session = Depends(get_db)) -> HTMLResponse:
 
     if not latest_emb:
         return HTMLResponse(
-            _head("World Map — n/a") +
+            _head("World Map â€” n/a") +
             '<body><div class="desktop"><div class="window">' +
-            _titlebar("VisibleHand — Global State Map", "/") +
+            _titlebar("VisibleHand â€” Global State Map", "/") +
             '<div style="padding:20px">No world-state embeddings yet. Run '
             '<code>python scripts/materialize_worldstate.py --date today --all</code> then '
             '<code>python scripts/build_analogue_index.py</code>.</div>'
@@ -1262,7 +1262,7 @@ async def world_page(db: Session = Depends(get_db)) -> HTMLResponse:
     return HTMLResponse(_build_world(points, clusters, regional, nodes, edges, as_of))
 
 
-# ── ASCII terminal: rotating 3D globe + ASCII charts ──────────────────────────
+# â”€â”€ ASCII terminal: rotating 3D globe + ASCII charts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 _TERMINAL_CSS = """
 .crt{
@@ -1370,7 +1370,7 @@ def _terminal_page(latest: list) -> str:
             f'<span class="{cls}">{r.composite:>5.1f}</span> '
             f'<span class="dim">{lvl}</span>'
         )
-    bars = "\n".join(bar_lines) if bar_lines else "  (no scores — run the seed script)"
+    bars = "\n".join(bar_lines) if bar_lines else "  (no scores â€” run the seed script)"
 
     # Risk-band histogram
     bands = [("VERY LOW", 0, 20, "b0"), ("LOW", 20, 40, "b1"), ("MODERATE", 40, 60, "b2"),
@@ -1379,7 +1379,7 @@ def _terminal_page(latest: list) -> str:
     for name, lo, hi, cls in bands:
         cnt = sum(1 for r in ranked if lo <= r.composite < hi)
         hist_lines.append(f'<span class="dim">{name.ljust(11)}</span>'
-                          f'<span class="{cls}">{"█" * cnt}</span> {cnt}')
+                          f'<span class="{cls}">{"â–ˆ" * cnt}</span> {cnt}')
     hist = "\n".join(hist_lines)
 
     # Regional averages
@@ -1400,41 +1400,41 @@ def _terminal_page(latest: list) -> str:
     n = len(ranked)
     avg_all = sum(r.composite for r in ranked) / n if n else 0
     hi = ranked[0] if ranked else None
-    hi_txt = f"{hi.country_code} {hi.composite:.1f}" if hi else "—"
+    hi_txt = f"{hi.country_code} {hi.composite:.1f}" if hi else "â€”"
 
     banner = (
         '<span class="head">'
-        '╔══════════════════════════════════════════════════════════════════╗\n'
-        '║   VISIBLEHAND ░▒▓ GLOBAL RISK TERMINAL ▓▒░               v0.3     ║\n'
-        '╚══════════════════════════════════════════════════════════════════╝'
+        'â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—\n'
+        'â•‘   VISIBLEHAND â–‘â–’â–“ GLOBAL RISK TERMINAL â–“â–’â–‘               v0.3     â•‘\n'
+        'â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•'
         '</span>'
     )
     statline = (f'<span class="dim">$</span> risk --world  '
                 f'<span class="lbl">countries</span>={n}  '
                 f'<span class="lbl">avg</span>={avg_all:.1f}  '
                 f'<span class="lbl">peak</span>={hi_txt}  '
-                f'<span class="blink">█</span>')
+                f'<span class="blink">â–ˆ</span>')
 
-    return _head("Terminal — VisibleHand") + (
+    return _head("Terminal â€” VisibleHand") + (
         "<body>"
         + _menubar(["File", "Edit", "View"])
         + '<div class="desktop"><div class="window">'
-        + _titlebar("VisibleHand Terminal — global_risk.ascii", "/")
+        + _titlebar("VisibleHand Terminal â€” global_risk.ascii", "/")
         + '<style>' + _TERMINAL_CSS + '</style>'
         + '<div class="crt">'
         + f'<pre>{banner}</pre>'
         + f'<pre class="sec">{statline}</pre>'
-        + '<div class="sec"><div class="sec-t">// LIVE ROTATION ─ front hemisphere · markers = scored countries</div>'
-        + '<pre id="globe">initialising orbital scan…</pre>'
-        + '<pre class="dim">  legend:  o low   O moderate   # high   @ critical      · graticule</pre></div>'
-        + '<div class="sec"><div class="sec-t">// RISK LADDER ─ all countries, descending</div>'
+        + '<div class="sec"><div class="sec-t">// LIVE ROTATION â”€ front hemisphere Â· markers = scored countries</div>'
+        + '<pre id="globe">initialising orbital scanâ€¦</pre>'
+        + '<pre class="dim">  legend:  o low   O moderate   # high   @ critical      Â· graticule</pre></div>'
+        + '<div class="sec"><div class="sec-t">// RISK LADDER â”€ all countries, descending</div>'
         + f'<pre>{bars}</pre></div>'
         + '<div class="grid2 sec">'
         + '<div><div class="sec-t">// DISTRIBUTION</div>' + f'<pre>{hist}</pre></div>'
         + '<div><div class="sec-t">// REGIONAL MEAN</div>' + f'<pre>{regions}</pre></div>'
         + '</div>'
-        + '<pre class="sec dim">  data: World Bank · IMF · BIS · GDELT/ACLED · V-Dem · WJP · TI · FH · NLP'
-        + '   ·   <a href="/dashboard">[dashboard]</a> <a href="/world">[world]</a> <a href="/api">[api]</a> <a href="/methodology">[methodology]</a></pre>'
+        + '<pre class="sec dim">  data: World Bank Â· IMF Â· BIS Â· GDELT/ACLED Â· V-Dem Â· WJP Â· TI Â· FH Â· NLP'
+        + '   Â·   <a href="/dashboard">[dashboard]</a> <a href="/world">[world]</a> <a href="/api">[api]</a> <a href="/methodology">[methodology]</a></pre>'
         + '</div>'  # /crt
         + f'<script type="application/json" id="mk">{markers_json}</script>'
         + '<script>' + _TERMINAL_JS + '</script>'
@@ -1485,7 +1485,7 @@ async def methodology_page() -> HTMLResponse:
         )
         bt_note = bt.note
     except Exception:
-        cal_rows = '<div class="d-row"><span class="d-label">AUC</span><span class="d-val">unavailable — run /calibration/roc</span></div>'
+        cal_rows = '<div class="d-row"><span class="d-label">AUC</span><span class="d-val">unavailable â€” run /calibration/roc</span></div>'
         bt_note = "Backtest unavailable. Run /calibration/roc to trigger."
 
     def wrow(name, pct, sources):
@@ -1496,19 +1496,19 @@ async def methodology_page() -> HTMLResponse:
                 f'<td style="color:#555">{sources}</td></tr>')
 
     weight_rows = (
-        wrow("economic",     weights.get("economic", 0.45),       "World Bank WDI · IMF WEO · BIS · ILO · IMF FSI") +
-        wrow("political",    weights.get("political", 0.25),      "GDELT · ACLED") +
+        wrow("economic",     weights.get("economic", 0.45),       "World Bank WDI Â· IMF WEO Â· BIS Â· ILO Â· IMF FSI") +
+        wrow("political",    weights.get("political", 0.25),      "GDELT Â· ACLED") +
         wrow("nlp_sentiment",weights.get("nlp_sentiment", 0.20),  "Central-bank statements (FinBERT + lexicon)") +
-        wrow("governance",   weights.get("governance", 0.10),     "V-Dem · WJP · TI CPI · Freedom House")
+        wrow("governance",   weights.get("governance", 0.10),     "V-Dem Â· WJP Â· TI CPI Â· Freedom House")
     )
 
-    return HTMLResponse(_head("Methodology — VisibleHand") + f"""
+    return HTMLResponse(_head("Methodology â€” VisibleHand") + f"""
 <body>
 {_menubar(["File","Edit","Go"])}
 <div class="desktop"><div class="window">
-{_titlebar("VisibleHand — Methodology v0.3", "/")}
+{_titlebar("VisibleHand â€” Methodology v0.3", "/")}
 <div class="statbar">
-  <span>Scoring model v0.3.0 · Calibration preprint in preparation (SSRN Q4 2026)</span>
+  <span>Scoring model v0.3.0 Â· Calibration preprint in preparation (SSRN Q4 2026)</span>
   <a href="/calibration/roc" style="font-size:10px">ROC data &#x25B8;</a>
 </div>
 <div class="scrollable">
@@ -1517,9 +1517,9 @@ async def methodology_page() -> HTMLResponse:
   <div class="m-sect-hdr">Overview</div>
   <div class="m-sect-body">
     <div class="infobox">
-      VisibleHand scores countries 0–100 by blending four sub-scorers. Each scorer is
+      VisibleHand scores countries 0â€“100 by blending four sub-scorers. Each scorer is
       normalised against the country's own historical baseline using robust statistics
-      (median/MAD), so scores reflect deviation from self — not rank among peers.
+      (median/MAD), so scores reflect deviation from self â€” not rank among peers.
       A score of 50 means typical historical conditions for that country.
     </div>
   </div>
@@ -1542,23 +1542,23 @@ async def methodology_page() -> HTMLResponse:
   <div class="m-sect-hdr">Economic Component</div>
   <div class="m-sect-body">
     <div class="infobox">
-      10 macro indicators. Each is normalised to a 0–100 risk scale using
+      10 macro indicators. Each is normalised to a 0â€“100 risk scale using
       robust median/MAD against own history, then combined with Theil-Sen
       trend weighting. Missing data is imputed conservatively.
     </div>
     <table class="m-tbl" style="margin-top:6px">
       <thead><tr><th>Indicator</th><th>Source</th><th>Direction</th></tr></thead>
       <tbody>
-        <tr><td class="mono">gdp_growth</td><td>World Bank WDI</td><td>↓ high growth = lower risk</td></tr>
-        <tr><td class="mono">inflation</td><td>World Bank WDI · IMF</td><td>↑ high inflation = higher risk</td></tr>
-        <tr><td class="mono">debt_to_gdp</td><td>IMF WEO</td><td>↑ high debt = higher risk</td></tr>
-        <tr><td class="mono">fx_reserves</td><td>World Bank · IMF</td><td>↓ low reserves = higher risk</td></tr>
-        <tr><td class="mono">current_account</td><td>World Bank WDI</td><td>↑ large deficit = higher risk</td></tr>
-        <tr><td class="mono">unemployment</td><td>ILO · World Bank</td><td>↑ high unemployment = higher risk</td></tr>
-        <tr><td class="mono">bank_npl</td><td>IMF FSI</td><td>↑ high NPL = higher risk</td></tr>
-        <tr><td class="mono">tax_revenue</td><td>World Bank WDI</td><td>↓ low revenue = higher risk</td></tr>
+        <tr><td class="mono">gdp_growth</td><td>World Bank WDI</td><td>â†“ high growth = lower risk</td></tr>
+        <tr><td class="mono">inflation</td><td>World Bank WDI Â· IMF</td><td>â†‘ high inflation = higher risk</td></tr>
+        <tr><td class="mono">debt_to_gdp</td><td>IMF WEO</td><td>â†‘ high debt = higher risk</td></tr>
+        <tr><td class="mono">fx_reserves</td><td>World Bank Â· IMF</td><td>â†“ low reserves = higher risk</td></tr>
+        <tr><td class="mono">current_account</td><td>World Bank WDI</td><td>â†‘ large deficit = higher risk</td></tr>
+        <tr><td class="mono">unemployment</td><td>ILO Â· World Bank</td><td>â†‘ high unemployment = higher risk</td></tr>
+        <tr><td class="mono">bank_npl</td><td>IMF FSI</td><td>â†‘ high NPL = higher risk</td></tr>
+        <tr><td class="mono">tax_revenue</td><td>World Bank WDI</td><td>â†“ low revenue = higher risk</td></tr>
         <tr><td class="mono">remittances</td><td>World Bank WDI</td><td>context-dependent</td></tr>
-        <tr><td class="mono">credit_gap</td><td>BIS</td><td>↑ large gap = higher risk</td></tr>
+        <tr><td class="mono">credit_gap</td><td>BIS</td><td>â†‘ large gap = higher risk</td></tr>
       </tbody>
     </table>
   </div>
@@ -1569,7 +1569,7 @@ async def methodology_page() -> HTMLResponse:
   <div class="m-sect-body">
     <div class="infobox">
       Hawkes process fitted per-country on GDELT/ACLED event feeds. The branching
-      ratio ρ measures self-sustaining instability (ρ → 1 = near-critical).
+      ratio Ï measures self-sustaining instability (Ï â†’ 1 = near-critical).
       A contagion network layer adds neighbor-country spillover. Events are typed
       (protest, conflict, coup, sanction, leadership change, election) and weighted by severity.
     </div>
@@ -1585,9 +1585,9 @@ async def methodology_page() -> HTMLResponse:
       <div style="padding:8px">
         <div style="font-size:10px;font-weight:bold;margin-bottom:4px">Hawkes Parameters</div>
         <div class="infobox" style="margin:0">
-          μ (background rate): baseline event frequency<br>
-          α (excitation): cross-event triggering<br>
-          β (decay): excitation half-life (~7 days)<br>
+          Î¼ (background rate): baseline event frequency<br>
+          Î± (excitation): cross-event triggering<br>
+          Î² (decay): excitation half-life (~7 days)<br>
           Fitted via Nelder-Mead MLE
         </div>
       </div>
@@ -1596,7 +1596,7 @@ async def methodology_page() -> HTMLResponse:
 </div>
 
 <div class="m-sect">
-  <div class="m-sect-hdr">NLP Component — Central-Bank Hawkishness</div>
+  <div class="m-sect-hdr">NLP Component â€” Central-Bank Hawkishness</div>
   <div class="m-sect-body">
     <div class="infobox">
       Hybrid FinBERT ONNX + domain lexicon reads central-bank statements.
@@ -1613,7 +1613,7 @@ async def methodology_page() -> HTMLResponse:
       </tbody>
     </table>
     <p style="font-size:10px;color:#666;margin-top:6px">
-      Score 0–100: 0 = very dovish/stable, 100 = very hawkish/stressed.
+      Score 0â€“100: 0 = very dovish/stable, 100 = very hawkish/stressed.
       Statements from Fed, ECB, BoE, Banco Central, NBU, RBI, SARB, and others.
     </p>
   </div>
@@ -1624,16 +1624,16 @@ async def methodology_page() -> HTMLResponse:
   <div class="m-sect-body">
     <div class="infobox">
       Four institutional quality measures, cross-sectionally normalised then
-      adjusted toward own-history baseline. Governance changes slowly —
+      adjusted toward own-history baseline. Governance changes slowly â€”
       data typically updated annually.
     </div>
     <table class="m-tbl" style="margin-top:6px">
       <thead><tr><th>Source</th><th>Indicators used</th><th>Coverage</th></tr></thead>
       <tbody>
-        <tr><td>V-Dem</td><td>Rule of law, corruption, judicial independence</td><td>1900–present</td></tr>
-        <tr><td>WJP Rule of Law</td><td>Composite rule-of-law index</td><td>2012–present</td></tr>
-        <tr><td>TI CPI</td><td>Corruption Perceptions Index</td><td>1995–present</td></tr>
-        <tr><td>Freedom House</td><td>Political rights + civil liberties</td><td>1973–present</td></tr>
+        <tr><td>V-Dem</td><td>Rule of law, corruption, judicial independence</td><td>1900â€“present</td></tr>
+        <tr><td>WJP Rule of Law</td><td>Composite rule-of-law index</td><td>2012â€“present</td></tr>
+        <tr><td>TI CPI</td><td>Corruption Perceptions Index</td><td>1995â€“present</td></tr>
+        <tr><td>Freedom House</td><td>Political rights + civil liberties</td><td>1973â€“present</td></tr>
       </tbody>
     </table>
   </div>
@@ -1642,12 +1642,12 @@ async def methodology_page() -> HTMLResponse:
 <div class="m-sect">
   <div class="m-sect-hdr">Score Bands &amp; Interpretation</div>
   <div class="m-sect-body">
-    <div class="risk-band-row"><span class="band-swatch dvl"></span><span class="band-range mono">0 – 19</span><span class="band-label">VERY LOW</span><span class="band-desc">Structural stability. No acute risk factors above historical norm.</span></div>
-    <div class="risk-band-row"><span class="band-swatch dlo"></span><span class="band-range mono">20 – 39</span><span class="band-label">LOW</span><span class="band-desc">Minor vulnerabilities. Within manageable range for this country.</span></div>
-    <div class="risk-band-row"><span class="band-swatch dmd"></span><span class="band-range mono">40 – 59</span><span class="band-label">MODERATE</span><span class="band-desc">Meaningful risk. Active monitoring warranted. Elevated vs baseline.</span></div>
-    <div class="risk-band-row"><span class="band-swatch dhi"></span><span class="band-range mono">60 – 74</span><span class="band-label">HIGH</span><span class="band-desc">Significant stress. Near-term policy response or intervention likely.</span></div>
-    <div class="risk-band-row"><span class="band-swatch dvh"></span><span class="band-range mono">75 – 89</span><span class="band-label">VERY HIGH</span><span class="band-desc">Acute crisis conditions. Multiple risk factors simultaneously elevated.</span></div>
-    <div class="risk-band-row"><span class="band-swatch dvh"></span><span class="band-range mono">90 – 100</span><span class="band-label">CRITICAL</span><span class="band-desc">Active crisis or severe institutional breakdown.</span></div>
+    <div class="risk-band-row"><span class="band-swatch dvl"></span><span class="band-range mono">0 â€“ 19</span><span class="band-label">VERY LOW</span><span class="band-desc">Structural stability. No acute risk factors above historical norm.</span></div>
+    <div class="risk-band-row"><span class="band-swatch dlo"></span><span class="band-range mono">20 â€“ 39</span><span class="band-label">LOW</span><span class="band-desc">Minor vulnerabilities. Within manageable range for this country.</span></div>
+    <div class="risk-band-row"><span class="band-swatch dmd"></span><span class="band-range mono">40 â€“ 59</span><span class="band-label">MODERATE</span><span class="band-desc">Meaningful risk. Active monitoring warranted. Elevated vs baseline.</span></div>
+    <div class="risk-band-row"><span class="band-swatch dhi"></span><span class="band-range mono">60 â€“ 74</span><span class="band-label">HIGH</span><span class="band-desc">Significant stress. Near-term policy response or intervention likely.</span></div>
+    <div class="risk-band-row"><span class="band-swatch dvh"></span><span class="band-range mono">75 â€“ 89</span><span class="band-label">VERY HIGH</span><span class="band-desc">Acute crisis conditions. Multiple risk factors simultaneously elevated.</span></div>
+    <div class="risk-band-row"><span class="band-swatch dvh"></span><span class="band-range mono">90 â€“ 100</span><span class="band-label">CRITICAL</span><span class="band-desc">Active crisis or severe institutional breakdown.</span></div>
   </div>
 </div>
 
@@ -1657,7 +1657,7 @@ async def methodology_page() -> HTMLResponse:
     <div class="infobox">
       Every score ships a 95% CI computed from 500-sample Monte Carlo
       perturbation of the input indicators. Wider CI = less data or higher
-      sensitivity to individual indicators. Confidence (0–1) reflects data
+      sensitivity to individual indicators. Confidence (0â€“1) reflects data
       coverage: 1.0 = all 10 economic indicators + events + NLP + governance present.
     </div>
   </div>
@@ -1667,7 +1667,7 @@ async def methodology_page() -> HTMLResponse:
   <div class="m-sect-hdr">6 / 12-Month Forecast</div>
   <div class="m-sect-body">
     <div class="infobox warn">
-      ⚠ The forecast is Theil-Sen extrapolation of score history combined
+      âš  The forecast is Theil-Sen extrapolation of score history combined
       with IMF WEO macro projections. It is NOT a prediction model.
       It extends current trends linearly. Use for scenario planning only.
       CI widens linearly with horizon.
@@ -1676,7 +1676,7 @@ async def methodology_page() -> HTMLResponse:
 </div>
 
 <div class="m-sect">
-  <div class="m-sect-hdr">Calibration — Backtest on Crisis Events</div>
+  <div class="m-sect-hdr">Calibration â€” Backtest on Crisis Events</div>
   <div class="m-sect-body">
     <div class="two-col">
       <div style="padding:6px 0">
@@ -1686,8 +1686,8 @@ async def methodology_page() -> HTMLResponse:
         <div class="infobox" style="margin:0">
           Dataset: ~220 crisis events (sovereign defaults, IMF programmes,
           currency crises, banking crises, civil war onsets, coups).<br>
-          Sources: IMF HPDD · Laeven &amp; Valencia (2012/2018) · UCDP ·
-          REIGN · World Bank (2000–2023).
+          Sources: IMF HPDD Â· Laeven &amp; Valencia (2012/2018) Â· UCDP Â·
+          REIGN Â· World Bank (2000â€“2023).
         </div>
       </div>
     </div>
@@ -1704,7 +1704,7 @@ async def methodology_page() -> HTMLResponse:
   <div class="m-sect-hdr">Limitations &amp; Known Issues</div>
   <div class="m-sect-body">
     <div class="infobox warn">
-      ⚠ Scores are relative to own history — a country that has always been
+      âš  Scores are relative to own history â€” a country that has always been
       unstable may score low even during acute crises. Cross-country comparison
       of raw scores should be done with care.
     </div>
@@ -1718,7 +1718,7 @@ async def methodology_page() -> HTMLResponse:
 
 </div><!-- /.scrollable -->
 <div class="winfooter">
-  <span>VisibleHand v0.3 · MIT · Calibration preprint: SSRN Q4 2026</span>
+  <span>VisibleHand v0.3 Â· MIT Â· Calibration preprint: SSRN Q4 2026</span>
   <a href="/api">API Reference &#x25B8;</a>
 </div>
 {_tabbar([("Browse","/"),("Dashboard","/dashboard"),("Terminal","/terminal"),("API","/api"),("Methodology","/methodology"),("",""),("Exit","/")], active="Methodology")}
@@ -1744,67 +1744,67 @@ async def api_reference() -> HTMLResponse:
     endpoints = (
         ep("GET", "/risk/{code}", "Composite risk score + 95% CI + driver attributions + forecast",
            "code: ISO-3166 alpha-2 (e.g. US, AR, UA)",
-           "→ RiskResponse · computed fresh or from cache"),
+           "â†’ RiskResponse Â· computed fresh or from cache"),
         ep("GET", "/risk/compare", "Compare up to 10 countries in one call",
            "countries: comma-separated codes (e.g. US,BR,AR,DE)",
-           "→ list[RiskResponse]"),
+           "â†’ list[RiskResponse]"),
         ep("GET", "/risk/{code}/history", "All stored score snapshots for a country",
-           "limit: int (default 100) · offset: int",
-           "→ list[HistoryPoint]"),
+           "limit: int (default 100) Â· offset: int",
+           "â†’ list[HistoryPoint]"),
         ep("GET", "/risk/{code}/drivers", "Signed per-indicator driver attributions",
            "code: country code",
-           "→ list[DriverAttribution]"),
+           "â†’ list[DriverAttribution]"),
         ep("GET", "/risk/{code}/aspects", "5-aspect NLP breakdown (central-bank statement)",
            "code: country code",
-           "→ AspectScoresResponse"),
+           "â†’ AspectScoresResponse"),
         ep("GET", "/risk/{code}/forecast", "6-month and 12-month score extrapolations",
            "code: country code",
-           "→ &#123; '6m': ForecastPoint, '12m': ForecastPoint &#125;"),
+           "â†’ &#123; '6m': ForecastPoint, '12m': ForecastPoint &#125;"),
         ep("GET", "/risk/movers", "Countries with largest risk score change (7-day window)",
            "limit: int (default 10)",
-           "→ list[MoverPoint]"),
+           "â†’ list[MoverPoint]"),
         ep("GET", "/risk/bulk", "Batch score multiple countries (POST body)",
-           "body: &#123; countries: [code, …] &#125;",
-           "→ list[RiskResponse]"),
+           "body: &#123; countries: [code, â€¦] &#125;",
+           "â†’ list[RiskResponse]"),
         ep("GET", "/indicators/{code}", "Raw economic indicator time series",
-           "code: country · metric: filter by name",
-           "→ list[IndicatorRow]"),
+           "code: country Â· metric: filter by name",
+           "â†’ list[IndicatorRow]"),
         ep("GET", "/events/{code}", "Political event feed with severity scores",
-           "code: country · limit: int",
-           "→ list[EventRow]"),
+           "code: country Â· limit: int",
+           "â†’ list[EventRow]"),
         ep("GET", "/governance/{code}", "Governance sub-scores (V-Dem, WJP, TI, FH)",
            "code: country",
-           "→ GovernanceResponse"),
+           "â†’ GovernanceResponse"),
         ep("GET", "/nlp/{code}", "Central-bank NLP hawkishness + latest statement text",
            "code: country",
-           "→ NLPResponse"),
+           "â†’ NLPResponse"),
         ep("GET", "/calibration/summary", "Methodology, component weights, AUC estimate",
            "",
-           "→ CalibrationSummary"),
-        ep("GET", "/calibration/roc", "Full ROC/PR curve data · include_curve=true for arrays",
+           "â†’ CalibrationSummary"),
+        ep("GET", "/calibration/roc", "Full ROC/PR curve data Â· include_curve=true for arrays",
            "include_curve: bool",
-           "→ ROCResult"),
-        ep("GET", "/calibration/dataset", "Crisis event dataset (220 events, 2000–2023)",
+           "â†’ ROCResult"),
+        ep("GET", "/calibration/dataset", "Crisis event dataset (220 events, 2000â€“2023)",
            "",
-           "→ &#123; n_total, events: […] &#125;"),
+           "â†’ &#123; n_total, events: [â€¦] &#125;"),
         ep("GET", "/health", "API health + DB connectivity + scored country count",
            "",
-           "→ HealthResponse"),
+           "â†’ HealthResponse"),
         ep("GET", "/health/ready", "Kubernetes readiness probe",
            "",
-           "→ 200 / 503"),
+           "â†’ 200 / 503"),
         ep("GET", "/metrics", "Prometheus scrape endpoint",
            "",
-           "→ text/plain"),
+           "â†’ text/plain"),
     )
 
-    return HTMLResponse(_head("API Reference — VisibleHand") + f"""
+    return HTMLResponse(_head("API Reference â€” VisibleHand") + f"""
 <body>
 {_menubar(["File","Edit","Go"])}
 <div class="desktop"><div class="window">
 {_titlebar("VisibleHand API Reference v0.3", "/")}
 <div class="statbar">
-  <span>Base URL: <span class="mono">https://api.visiblehand.dev</span>&nbsp;&nbsp;&#183;&nbsp;&nbsp;MIT License</span>
+  <span>Base URL: <span class="mono">https://api.visiblehand.xyz</span>&nbsp;&nbsp;&#183;&nbsp;&nbsp;MIT License</span>
   <a href="/docs" style="font-size:10px">Interactive Swagger &#x25B8;</a>
 </div>
 <div class="scrollable">
@@ -1813,7 +1813,7 @@ async def api_reference() -> HTMLResponse:
   <div class="m-sect-hdr">Authentication</div>
   <div class="m-sect-body">
     <div class="infobox">
-      All read endpoints (<span class="mono">GET</span>) are public — no key required.
+      All read endpoints (<span class="mono">GET</span>) are public â€” no key required.
       Set <span class="mono">X-API-Key</span> header to bypass rate limits (contact for key).
     </div>
     <div class="infobox" style="margin-top:6px">
@@ -1836,15 +1836,15 @@ async def api_reference() -> HTMLResponse:
 </div>
 
 <div class="m-sect">
-  <div class="m-sect-hdr">Example — GET /risk/&#123;code&#125;</div>
+  <div class="m-sect-hdr">Example â€” GET /risk/&#123;code&#125;</div>
   <div class="m-sect-body">
     <div class="two-col">
       <div style="padding-right:10px">
         <div style="font-size:10px;font-weight:bold;margin-bottom:4px">Request</div>
-        <div class="doc-pre"><span class="g">$</span> <span class="k">curl</span> https://api.visiblehand.dev/<span class="v">risk/AR</span>
+        <div class="doc-pre"><span class="g">$</span> <span class="k">curl</span> https://api.visiblehand.xyz/<span class="v">risk/AR</span>
 
 <span class="g"># Optional weight overrides:</span>
-<span class="g">$</span> <span class="k">curl</span> "…/risk/AR?economic_weight=0.5
+<span class="g">$</span> <span class="k">curl</span> "â€¦/risk/AR?economic_weight=0.5
   &amp;political_weight=0.3
   &amp;nlp_weight=0.1
   &amp;governance_weight=0.1"</div>
@@ -1860,7 +1860,7 @@ async def api_reference() -> HTMLResponse:
         </table>
       </div>
       <div style="padding-left:10px">
-        <div style="font-size:10px;font-weight:bold;margin-bottom:4px">Response — 200 OK</div>
+        <div style="font-size:10px;font-weight:bold;margin-bottom:4px">Response â€” 200 OK</div>
         <div class="doc-pre">{{
   <span class="k">"country"</span>:   <span class="s">"AR"</span>,
   <span class="k">"name"</span>:      <span class="s">"Argentina"</span>,
@@ -1905,8 +1905,8 @@ async def api_reference() -> HTMLResponse:
       <thead><tr><th style="width:60px">Status</th><th>Meaning</th><th>Body</th></tr></thead>
       <tbody>
         <tr><td class="mono" style="font-weight:bold">200</td><td>OK</td><td>Requested resource</td></tr>
-        <tr><td class="mono" style="font-weight:bold">404</td><td>Not Found</td><td><span class="mono">&#123;"detail":"…"&#125;</span> — unknown country code or no data yet</td></tr>
-        <tr><td class="mono" style="font-weight:bold">422</td><td>Validation Error</td><td><span class="mono">&#123;"detail":[…]&#125;</span> — invalid parameter type/range</td></tr>
+        <tr><td class="mono" style="font-weight:bold">404</td><td>Not Found</td><td><span class="mono">&#123;"detail":"â€¦"&#125;</span> â€” unknown country code or no data yet</td></tr>
+        <tr><td class="mono" style="font-weight:bold">422</td><td>Validation Error</td><td><span class="mono">&#123;"detail":[â€¦]&#125;</span> â€” invalid parameter type/range</td></tr>
         <tr><td class="mono" style="font-weight:bold">429</td><td>Rate Limited</td><td><span class="mono">&#123;"error":"rate limit exceeded"&#125;</span></td></tr>
         <tr><td class="mono" style="font-weight:bold">500</td><td>Server Error</td><td><span class="mono">&#123;"detail":"internal server error"&#125;</span></td></tr>
       </tbody>
@@ -1915,7 +1915,7 @@ async def api_reference() -> HTMLResponse:
 </div>
 
 <div class="m-sect">
-  <div class="m-sect-hdr">SDK — Python Client</div>
+  <div class="m-sect-hdr">SDK â€” Python Client</div>
   <div class="m-sect-body">
     <div class="doc-pre"><span class="g"># Install</span>
 <span class="k">pip install</span> visiblehand
@@ -1931,14 +1931,14 @@ score = c.risk(<span class="s">"AR"</span>)
 <span class="k">async with</span> AsyncClient() <span class="k">as</span> c:
     scores = <span class="k">await</span> c.compare([<span class="s">"US"</span>, <span class="s">"BR"</span>, <span class="s">"AR"</span>])</div>
     <div style="margin-top:6px;font-size:10px;color:#666">
-      SDK source: <span class="mono">sdk/visiblehand/__init__.py</span> · Install locally: <span class="mono">pip install -e sdk/</span>
+      SDK source: <span class="mono">sdk/visiblehand/__init__.py</span> Â· Install locally: <span class="mono">pip install -e sdk/</span>
     </div>
   </div>
 </div>
 
 </div><!-- /.scrollable -->
 <div class="winfooter">
-  <span>VisibleHand v0.3 · MIT License · Free &amp; open-source</span>
+  <span>VisibleHand v0.3 Â· MIT License Â· Free &amp; open-source</span>
   <a href="/docs" style="font-size:10px">Interactive Swagger &#x25B8;</a>
 </div>
 {_tabbar([("Browse","/"),("Dashboard","/dashboard"),("Terminal","/terminal"),("API","/api"),("Methodology","/methodology"),("",""),("Exit","/")], active="API")}
@@ -1947,7 +1947,7 @@ score = c.risk(<span class="s">"AR"</span>)
 
 @router.get("/", response_class=HTMLResponse, include_in_schema=False)
 async def landing() -> HTMLResponse:
-    return HTMLResponse(_head("VisibleHand — Open Country Risk API") + """
+    return HTMLResponse(_head("VisibleHand â€” Open Country Risk API") + """
 <body>
 <div class="menubar">
   <span class="apple">&#x2318;</span>
@@ -1958,7 +1958,7 @@ async def landing() -> HTMLResponse:
 <div class="window">
 <div class="titlebar">
   <div class="closebox"></div>
-  <div class="titletext">VisibleHand — Open Country Risk API</div>
+  <div class="titletext">VisibleHand â€” Open Country Risk API</div>
   <div class="zoombox">&#x25B8;</div>
 </div>
 
@@ -1969,7 +1969,7 @@ async def landing() -> HTMLResponse:
     <hr class="hero-rule">
     <div class="cbx-row"><span class="cbx"></span> Introduction</div>
     <p class="intro">
-      An open, programmable political-economic risk score for every country —
+      An open, programmable political-economic risk score for every country â€”
       built from live World Bank, IMF, GDELT/ACLED, V-Dem data and NLP on
       central-bank statements. Free. Calibrated. Transparent.<br><br>
       Click the Dashboard tab below after you've seen the Introduction.
@@ -1983,7 +1983,7 @@ async def landing() -> HTMLResponse:
     </div>
   </div>
   <div class="hero-r">
-    <div class="code-win"><span class="g">$ </span><span class="k">curl</span> api.visiblehand.dev/<span class="v">risk/AR</span>
+    <div class="code-win"><span class="g">$ </span><span class="k">curl</span> api.visiblehand.xyz/<span class="v">risk/AR</span>
 
 {
   <span class="k">"country"</span>:    <span class="s">"AR"</span>,
@@ -2013,7 +2013,7 @@ async def landing() -> HTMLResponse:
 <div class="feat-hdr">What's in the Box</div>
 <div class="feat-grid">
   <div class="fc"><div class="fc-h">Scored vs own history</div>
-    <p class="fc-p">Robust median/MAD normalisation — a country is judged against its own trajectory, not a global mean.</p></div>
+    <p class="fc-p">Robust median/MAD normalisation â€” a country is judged against its own trajectory, not a global mean.</p></div>
   <div class="fc"><div class="fc-h">Bayesian uncertainty</div>
     <p class="fc-p">Every score ships a 95% CI from 500-sample Monte Carlo. No commercial competitor publishes bounds.</p></div>
   <div class="fc"><div class="fc-h">Hawkish/dovish NLP</div>
@@ -2021,13 +2021,13 @@ async def landing() -> HTMLResponse:
   <div class="fc"><div class="fc-h">Hawkes process</div>
     <p class="fc-p">Political violence is self-exciting. We fit a Hawkes process per country and report the branching ratio.</p></div>
   <div class="fc"><div class="fc-h">Governance layer</div>
-    <p class="fc-p">V-Dem, WJP Rule of Law, TI CPI, and Freedom House — structural factors that economic data misses.</p></div>
+    <p class="fc-p">V-Dem, WJP Rule of Law, TI CPI, and Freedom House â€” structural factors that economic data misses.</p></div>
   <div class="fc"><div class="fc-h">6/12-month forecast</div>
     <p class="fc-p">Theil-Sen extrapolation on score history + IMF WEO projections. Transparent about what it is.</p></div>
 </div>
 
 <div class="winfooter">
-  <span>Free &amp; open-source &nbsp;&#183;&nbsp; Commercial equivalents cost $15–50k/yr</span>
+  <span>Free &amp; open-source &nbsp;&#183;&nbsp; Commercial equivalents cost $15â€“50k/yr</span>
   <a href="/docs">API Documentation &#x25B8;</a>
 </div>
 

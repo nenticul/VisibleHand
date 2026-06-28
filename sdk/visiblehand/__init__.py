@@ -1,4 +1,4 @@
-"""
+﻿"""
 VisibleHand Python SDK v0.3.0
 
 Full typed client for the VisibleHand political-economic risk API.
@@ -35,7 +35,7 @@ from typing import Optional
 import httpx
 
 
-# ── Data models ───────────────────────────────────────────────────────────────
+# â”€â”€ Data models â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @dataclass
 class ScoreBreakdown:
@@ -217,7 +217,7 @@ class HistoryPoint:
         )
 
 
-# ── Sync client ───────────────────────────────────────────────────────────────
+# â”€â”€ Sync client â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class Client:
     """
@@ -229,7 +229,7 @@ class Client:
         timeout: Request timeout in seconds.
     """
 
-    DEFAULT_BASE = "https://api.visiblehand.dev"
+    DEFAULT_BASE = "https://api.visiblehand.xyz"
 
     def __init__(
         self,
@@ -313,7 +313,7 @@ class Client:
         return self._get("/health")
 
 
-# ── Async client ──────────────────────────────────────────────────────────────
+# â”€â”€ Async client â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class AsyncClient:
     """
@@ -324,7 +324,7 @@ class AsyncClient:
             score = await client.risk("BR")
     """
 
-    DEFAULT_BASE = "https://api.visiblehand.dev"
+    DEFAULT_BASE = "https://api.visiblehand.xyz"
 
     def __init__(
         self,

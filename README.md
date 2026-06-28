@@ -1,4 +1,4 @@
-# VisibleHand
+﻿# VisibleHand
 
 **Political-economic risk scoring for every country. Free. Programmable. Open.**
 
@@ -20,7 +20,7 @@ print(score.methodology)    # Plain-language explanation of what drove the numbe
 Or via HTTP:
 
 ```bash
-curl https://api.visiblehand.dev/risk/BR
+curl https://api.visiblehand.xyz/risk/BR
 ```
 
 ```json
@@ -32,21 +32,21 @@ curl https://api.visiblehand.dev/risk/BR
   "risk_level": "High",
   "breakdown": { "economic": 72.9, "political": 65.2, "nlp_sentiment": 85.0 },
   "top_drivers": ["hawkish_central_bank_language", "high_inflation_vs_history", "rapid_escalation"],
-  "methodology": "Economic risk 73/100 (weight 50%, confidence 80%). Political risk 65/100 from 3 events (weight 30%). Central-bank language hawkish → 85/100 (weight 20%).",
+  "methodology": "Economic risk 73/100 (weight 50%, confidence 80%). Political risk 65/100 from 3 events (weight 30%). Central-bank language hawkish â†’ 85/100 (weight 20%).",
   "components": { "economic": { "score": 72.9, "confidence": 0.8, "detail": {"inflation": 88.6, "fx_reserves": 79.1} } },
   "updated_at": "2026-06-26T06:00:00Z"
 }
 ```
 
 Every score carries a **confidence** (driven by data coverage + freshness), a
-**risk band**, ranked **drivers**, and a plain-language **methodology** — so the
+**risk band**, ranked **drivers**, and a plain-language **methodology** â€” so the
 number is never a black box.
 
 ---
 
 ## What it does
 
-VisibleHand scores country-level political-economic risk on a continuous **0–100 scale**
+VisibleHand scores country-level political-economic risk on a continuous **0â€“100 scale**
 (0 = extremely stable, 100 = extremely high risk), updated daily from live sources.
 
 **Three sub-scores, one composite:**
@@ -57,24 +57,24 @@ VisibleHand scores country-level political-economic risk on a continuous **0–1
 | Political | 30% | Baseline-relative, decay-weighted GDELT/ACLED events + escalation |
 | NLP sentiment | 20% | **FinBERT + central-bank hawkish/dovish lexicon** on policy statements |
 
-**Configurable weights** — override per request:
+**Configurable weights** â€” override per request:
 
 ```bash
 # A political risk analyst who wants to emphasise events
-curl "https://api.visiblehand.dev/risk/UA?political_weight=0.6&economic_weight=0.3&nlp_weight=0.1"
+curl "https://api.visiblehand.xyz/risk/UA?political_weight=0.6&economic_weight=0.3&nlp_weight=0.1"
 ```
 
 ---
 
 ## Why it exists
 
-Commercial equivalents cost **$15,000–$50,000/year**:
+Commercial equivalents cost **$15,000â€“$50,000/year**:
 
 | Product | Price |
 |---------|-------|
-| PRS Group ICRG | $15k–$30k/year |
+| PRS Group ICRG | $15kâ€“$30k/year |
 | Bloomberg COUN | $24k/user/year (Terminal) |
-| Oxford Economics | $10k–$50k/year |
+| Oxford Economics | $10kâ€“$50k/year |
 | Control Risks RiskMap | $20k+/year |
 
 **VisibleHand:** free to self-host. Public API tier available via API key.
@@ -83,7 +83,7 @@ Commercial equivalents cost **$15,000–$50,000/year**:
 
 ## Live dashboard
 
-A shareable, no-auth risk heatmap is served at **`/dashboard`** — sortable
+A shareable, no-auth risk heatmap is served at **`/dashboard`** â€” sortable
 columns, sub-score bars, confidence, and top drivers per country, auto-refreshing.
 The landing page at **`/`** is a polished product page. Both are server-rendered,
 zero-JS-framework, and work the moment the app boots.
@@ -179,19 +179,19 @@ for day in history[-5:]:
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────┐
-│  Data ingestion (daily, APScheduler)                │
-│  World Bank ─┐                                       │
-│  FRED ───────┼──► PostgreSQL ◄── Scoring engine     │
-│  IMF ────────┘    (indicators,    (economic scorer   │
-│  GDELT ──────────► events,        political scorer   │
-│  Central bank ───► statements)    NLP scorer)        │
-│  PDFs/HTML                             │             │
-└────────────────────────────────────────┼─────────────┘
-                                         ▼
+â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+â”‚  Data ingestion (daily, APScheduler)                â”‚
+â”‚  World Bank â”€â”                                       â”‚
+â”‚  FRED â”€â”€â”€â”€â”€â”€â”€â”¼â”€â”€â–º PostgreSQL â—„â”€â”€ Scoring engine     â”‚
+â”‚  IMF â”€â”€â”€â”€â”€â”€â”€â”€â”˜    (indicators,    (economic scorer   â”‚
+â”‚  GDELT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â–º events,        political scorer   â”‚
+â”‚  Central bank â”€â”€â”€â–º statements)    NLP scorer)        â”‚
+â”‚  PDFs/HTML                             â”‚             â”‚
+â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+                                         â–¼
                               FastAPI REST API
                               (Railway deployment)
-                                    ▲
+                                    â–²
                               Python SDK (PyPI)
 ```
 
@@ -219,9 +219,9 @@ make worldstate-train   # logistic hazard baselines + conformal calibrator
 | `GET /world/graph`, `/world/clusters` | Country graph & state clusters |
 | `GET /model/leaderboard`, `/model/card` | Honest benchmarks & model card |
 | `GET /world` | **Global state-space map** (PCA scatter + contagion network, HTML) |
-| `GET /worldstate/{code}` | World-State page — hazard radar, score gauge, analogues (HTML) |
+| `GET /worldstate/{code}` | World-State page â€” hazard radar, score gauge, analogues (HTML) |
 
-Built with numpy-only baselines (PCA, logistic, split conformal) — transparent
+Built with numpy-only baselines (PCA, logistic, split conformal) â€” transparent
 and dependency-light. Frontier models (TimesFM, TabPFN, neural Hawkes, GNN) are
 benchmark-gated experiments. See [docs/worldstate/overview.md](docs/worldstate/overview.md),
 [MODEL_CARD_vh_wsm_0.1.md](MODEL_CARD_vh_wsm_0.1.md), and
@@ -236,7 +236,7 @@ Full scoring methodology documented in [METHODOLOGY.md](METHODOLOGY.md).
   A country is scored against its own history, not a global mean.
 - Political score: exponential decay of event counts (half-life 90 days) so
   recent events weigh more than old ones.
-- NLP score: DistilBERT sentiment analysis on central bank press releases —
+- NLP score: DistilBERT sentiment analysis on central bank press releases â€”
   hawkish language during inflationary regimes signals elevated risk.
 
 ---
@@ -248,7 +248,7 @@ Pull requests welcome. Key areas for contribution:
 - Additional country coverage (currently ~20 countries)
 - ACLED integration for more precise political event data
 - Multi-language central-bank statement support (ECB, Banque de France, Banxico)
-- Calibration study against historical sovereign stress events (see METHODOLOGY §6)
+- Calibration study against historical sovereign stress events (see METHODOLOGY Â§6)
 - A purpose-built hawkish/dovish model fine-tuned on FOMC/ECB minutes
 
 ---

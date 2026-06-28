@@ -1,4 +1,4 @@
-# VisibleHand API Terms of Use
+﻿# VisibleHand API Terms of Use
 
 **Effective date:** 2026-06-27  
 **Version:** 1.0
@@ -41,7 +41,7 @@ responsible for complying with the upstream data license terms**, including:
 
 VisibleHand is not a data reseller. It processes these inputs into derived scores.
 The legal exposure for upstream license violations rests with the end user, not
-with VisibleHand, provided the end user has been notified of these restrictions —
+with VisibleHand, provided the end user has been notified of these restrictions â€”
 which is the purpose of this document.
 
 For purely academic, research, journalistic, or personal use, no action is required
@@ -53,7 +53,7 @@ beyond normal academic attribution.
 
 When publishing results based on VisibleHand scores, attribution is appreciated:
 
-> *Country risk scores provided by VisibleHand (api.visiblehand.dev), an open-source
+> *Country risk scores provided by VisibleHand (api.visiblehand.xyz), an open-source
 > political-economic risk scoring system.*
 
 For academic publications, please cite the methodology document when available.
@@ -63,7 +63,7 @@ For academic publications, please cite the methodology document when available.
 ## 5. No Warranty
 
 VisibleHand scores are provided "as is" without warranty of any kind. They are
-analytical tools based on public data and automated scoring — not investment advice,
+analytical tools based on public data and automated scoring â€” not investment advice,
 legal advice, or professional risk assessments. Do not rely on them as the sole
 basis for financial, legal, or security decisions.
 

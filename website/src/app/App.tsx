@@ -516,32 +516,149 @@ function Ticker(){
 /* ═══════════════════════════════════════════════════════════════════════════
    SIGNAL MODULE  ·  hardware panel + VU meters (image-4 aesthetic)
 ═══════════════════════════════════════════════════════════════════════════ */
-function ModeToggle(){
-  const {mode,setMode}=useVH();
-  const opts:[("temporal"|"cross_sectional"),string,string][]=[
-    ["temporal","vs OWN HISTORY","each country normalised against its own past — detects regime shifts"],
-    ["cross_sectional","vs GLOBAL BASELINE","ranked against income + region peers and an investment-grade anchor"],
-  ];
+/* Approx. lat/long (deg) for the countries the API scores — used to place live
+   risk markers on the rotating globe. */
+const GEO:Record<string,[number,number]>={
+  ARG:[-34,-64], BRA:[-10,-52], CHN:[35,103], COL:[4,-73], EGY:[27,30],
+  GHA:[8,-1], IND:[22,79], IDN:[-2,118], IRN:[32,53], KEN:[0,38],
+  MEX:[23,-102], NGA:[10,8], PAK:[30,70], PER:[-10,-76], PHL:[13,122],
+  RUS:[61,100], TUR:[39,35], UKR:[49,32], USA:[40,-100], VEN:[7,-66],
+  ZAF:[-29,24], ZWE:[-19,29],
+};
+/* risk band → ASCII glyph (denser = higher risk); pure black on white. */
+const GLYPH:Record<Level,string>={LOW:"·",WATCH:"+",ELEVATED:"o",HIGH:"O",SEVERE:"#"};
+
+/* Rotating ASCII world drawn to ONE <canvas>: a faint graticule sphere (single
+   GPU layer, ~1k fillText/frame) with live country markers projected from real
+   lat/long onto the front hemisphere and glyphed by risk band. White terminal,
+   black ASCII. Gated by IntersectionObserver + visibility + reduced-motion so it
+   never spins off-screen. */
+const AsciiGlobe=memo(function AsciiGlobe(){
+  const {files:FILES}=useVH();
+  const ref=useRef<HTMLCanvasElement>(null);
+  const filesRef=useRef(FILES); filesRef.current=FILES;
+  useEffect(()=>{
+    const canvas=ref.current; if(!canvas) return;
+    const ctx=canvas.getContext("2d"); if(!ctx) return;
+    const reduce=window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const LAT_STEP=20, LON_STEP=20, DEG=Math.PI/180;
+
+    let W=0,H=0,Rp=0,fs=0,cw=0,chh=0;
+    type Cell={px:number;py:number;nx:number;ny:number;nz:number;limb:boolean};
+    let cells:Cell[]=[];
+    const layout=()=>{
+      const dpr=window.devicePixelRatio||1;
+      const availW=canvas.parentElement?.clientWidth||360;
+      W=availW; H=Math.max(300,Math.min(440,Math.round(availW*0.86)));
+      fs=Math.max(9,Math.min(14,W/40));
+      cw=fs*0.6; chh=fs*1.06;
+      Rp=Math.min(W,H)*0.43;
+      canvas.style.width=W+"px"; canvas.style.height=H+"px";
+      canvas.width=Math.round(W*dpr); canvas.height=Math.round(H*dpr);
+      ctx.setTransform(dpr,0,0,dpr,0,0);
+      ctx.textAlign="center"; ctx.textBaseline="middle";
+      // Precompute every cell that lands inside the projected disc (rotation-invariant).
+      cells=[];
+      const cols=Math.floor(W/cw), rows=Math.floor(H/chh);
+      const ox=(W-cols*cw)/2, oy=(H-rows*chh)/2;
+      for(let r=0;r<rows;r++) for(let c=0;c<cols;c++){
+        const px=ox+(c+0.5)*cw, py=oy+(r+0.5)*chh;
+        const nx=(px-W/2)/Rp, ny=(H/2-py)/Rp;     // ny flipped so north is up
+        const rr=nx*nx+ny*ny;
+        if(rr>1) continue;
+        cells.push({px,py,nx,ny,nz:Math.sqrt(1-rr),limb:rr>0.9});
+      }
+    };
+    layout();
+
+    let a=0, last=0, running=false, visible=true, raf=0;
+    const draw=(time:number)=>{
+      // ~22fps cap — a slow, legible rotation that stays cheap.
+      if(time-last>=45){
+        last=time; a=time*0.00018;          // ~35s per revolution
+        const cosA=Math.cos(a), sinA=Math.sin(a);
+        ctx.clearRect(0,0,W,H);
+        ctx.fillStyle="#FFFFFF"; ctx.fillRect(0,0,W,H);
+        ctx.font=`${fs}px 'JetBrains Mono', ui-monospace, monospace`;
+        // graticule + limb
+        for(let i=0;i<cells.length;i++){
+          const g=cells[i]!;
+          if(g.limb){ ctx.fillStyle="rgba(16,16,16,0.5)"; ctx.fillText("·",g.px,g.py); continue; }
+          const wx=g.nx*cosA-g.nz*sinA, wy=g.ny, wz=g.nx*sinA+g.nz*cosA;
+          const latD=Math.asin(wy<-1?-1:wy>1?1:wy)/DEG;
+          const lonD=Math.atan2(wx,wz)/DEG;
+          const dLat=Math.abs(latD-LAT_STEP*Math.round(latD/LAT_STEP));
+          const dLon=Math.abs(lonD-LON_STEP*Math.round(lonD/LON_STEP));
+          const onLat=dLat<2.4, onLon=dLon<2.4 && Math.abs(latD)<74;
+          if(!onLat && !onLon) continue;
+          ctx.fillStyle=`rgba(16,16,16,${0.18+g.nz*0.18})`;
+          ctx.fillText(onLat&&onLon?"+":"·",g.px,g.py);
+        }
+        // live country markers (front hemisphere only)
+        const F=filesRef.current;
+        ctx.font=`${fs*1.05}px 'JetBrains Mono', ui-monospace, monospace`;
+        for(const code in GEO){
+          const f=F[code]; if(!f) continue;
+          const [latd,lond]=GEO[code]!;
+          const lat=latd*DEG, lon=lond*DEG;
+          const wx=Math.cos(lat)*Math.sin(lon), wy=Math.sin(lat), wz=Math.cos(lat)*Math.cos(lon);
+          const vz=-wx*sinA+wz*cosA;
+          if(vz<=0.04) continue;                 // hidden on the far side
+          const vx=wx*cosA+wz*sinA;
+          const px=W/2+vx*Rp, py=H/2-wy*Rp;
+          ctx.fillStyle="#101010";
+          ctx.fillText(GLYPH[f.level],px,py);
+          if(f.level==="HIGH"||f.level==="SEVERE"){  // label the hotspots
+            ctx.font=`${Math.max(7,fs*0.6)}px 'JetBrains Mono', ui-monospace, monospace`;
+            ctx.fillStyle="rgba(16,16,16,0.7)";
+            ctx.fillText(code,px+fs*0.95,py);
+            ctx.font=`${fs*1.05}px 'JetBrains Mono', ui-monospace, monospace`;
+          }
+        }
+      }
+      if(running) raf=requestAnimationFrame(draw);
+    };
+    const start=()=>{ if(!running && !reduce){ running=true; raf=requestAnimationFrame(draw); } };
+    const stop =()=>{ running=false; cancelAnimationFrame(raf); };
+    if(reduce){ last=-9999; draw(performance.now()); }   // single static frame
+    const ro=new ResizeObserver(()=>{ layout(); if(reduce){ last=-9999; draw(performance.now()); } });
+    ro.observe(canvas.parentElement||canvas);
+    const io=new IntersectionObserver(([e])=>{ visible=e.isIntersecting; (visible&&!document.hidden)?start():stop(); },{threshold:0});
+    if(!reduce) io.observe(canvas);
+    const onVis=()=>{ document.hidden?stop():(visible&&start()); };
+    document.addEventListener("visibilitychange",onVis);
+    return()=>{ stop(); ro.disconnect(); io.disconnect(); document.removeEventListener("visibilitychange",onVis); };
+  },[]);
+  return <canvas ref={ref} aria-label="Rotating world risk globe" role="img" className="select-none block" style={{display:"block"}}/>;
+});
+
+/* White terminal housing the ASCII globe — same hardware framing as HwPanel but a
+   clean white interior, per the “white terminal / black ASCII” brief. */
+function GlobeTerminal(){
+  const {files:FILES,meta}=useVH();
+  const n=Object.keys(FILES).length;
   return(
-    <div className="flex flex-col items-start sm:items-end gap-[6px]">
-      <div className={`${m} inline-flex border-2 border-[#101010]`} style={{boxShadow:"3px 3px 0 #101010"}}>
-        {opts.map(([val,label])=>(
-          <button key={val} onClick={()=>setMode(val)} aria-pressed={mode===val}
-            className="px-3 py-[7px] text-[9px] tracking-[0.12em] uppercase transition-colors duration-[120ms]"
-            style={{background:mode===val?"#101010":"#F4F2EA",color:mode===val?"#F4F2EA":"#101010"}}>
-            {label}
-          </button>
-        ))}
+    <div className="border-2 border-[#101010] bg-white flex flex-col" style={{boxShadow:"4px 4px 0 #101010"}}>
+      <div className="flex items-center justify-between border-b-2 border-[#101010] px-3 py-[5px] bg-[#E9E5DA]">
+        <div className="flex items-center gap-2">
+          <div className="w-[7px] h-[7px] border border-[#101010]" style={{background:"#2F5F5F"}}/>
+          <span className={`${m} text-[10px] tracking-[0.18em] font-bold text-[#101010]`}>WORLD RISK GLOBE</span>
+        </div>
+        <span className={`${m} text-[9px] text-[#6B6660]`}>ASCII · {meta.live?"● LIVE":"SNAPSHOT"}</span>
       </div>
-      <div className={`${m} text-[8px] tracking-[0.06em] text-[#A09A8E] max-w-[300px] sm:text-right`}>
-        {opts.find(o=>o[0]===mode)![2]}
+      <div className="bg-white flex-1 flex items-center justify-center overflow-hidden">
+        <AsciiGlobe/>
+      </div>
+      <div className={`${m} flex items-center justify-between flex-wrap gap-x-4 gap-y-1 border-t-2 border-[#101010] px-3 py-2 bg-white text-[8px] tracking-[0.08em] text-[#6B6660]`}>
+        <span>{n} NATIONS · LIVE FROM /risk/compare</span>
+        <span className="text-[#101010]">· LOW&nbsp;&nbsp;+ WATCH&nbsp;&nbsp;o ELEV&nbsp;&nbsp;O HIGH&nbsp;&nbsp;# SEVERE</span>
       </div>
     </div>
   );
 }
 
 function SignalModule(){
-  const {files:FILES}=useVH();
+  const {files:FILES,meta}=useVH();
   const top=Object.entries(FILES).sort((a,b)=>b[1].score-a[1].score).slice(0,16);
   return(
     <section id="signal" className="border-t-2 border-[#101010] py-14 bg-[#F4F2EA]">
@@ -549,11 +666,20 @@ function SignalModule(){
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6">
           <div>
             <div className={`${m} text-[9px] tracking-[0.18em] text-[#6B6660] mb-1`}>001 · SIGNAL DESK</div>
-            <div className="font-['Inter',sans-serif] font-black uppercase leading-none text-[#101010]" style={{fontSize:"clamp(20px,3vw,32px)"}}>MEASUREMENT MODE</div>
+            <div className="font-['Inter',sans-serif] font-black uppercase leading-none text-[#101010]" style={{fontSize:"clamp(20px,3vw,32px)"}}>GLOBAL RISK MONITOR</div>
           </div>
-          <ModeToggle/>
+          <div className={`${m} flex items-center gap-2 text-[9px] tracking-[0.12em] text-[#6B6660] self-start sm:self-end`}>
+            <span style={{width:7,height:7,borderRadius:9,background:meta.live?"#4A6840":"#A08A54",boxShadow:meta.live?"0 0 5px #4A6840":"none",display:"inline-block"}}/>
+            {meta.live?`LIVE${meta.asOf?` · ${meta.asOf}`:""}`:"SNAPSHOT"}
+          </div>
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4 mb-4">
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-4 mb-4 items-stretch">
+          <GlobeTerminal/>
+          <HwPanel title="LIVE SIGNAL FEED" code="" accent="#4A6840">
+            <div className="p-2"><SignalFeed/></div>
+          </HwPanel>
+        </div>
+        <div className="mb-4">
           <HwPanel title="RISK CHANNEL STRIP" code="" accent="#8D2F2F">
             <div className="p-4">
               <div className="flex flex-wrap gap-[6px]">
@@ -563,9 +689,6 @@ function SignalModule(){
                 <span>0</span><span>25</span><span>50</span><span>75</span><span>100</span>
               </div>
             </div>
-          </HwPanel>
-          <HwPanel title="LIVE SIGNAL FEED" code="" accent="#4A6840">
-            <div className="p-2"><SignalFeed/></div>
           </HwPanel>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

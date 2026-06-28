@@ -63,7 +63,7 @@ const ISO2_TO_ISO3: Record<string, string> =
 const FETCH_CODES = Object.values(ISO3_TO_ISO2);
 
 export const API_BASE = (
-  (import.meta.env.VITE_API_BASE as string | undefined) || "https://api.visiblehand.dev"
+  (import.meta.env.VITE_API_BASE as string | undefined) || "https://api.visiblehand.xyz"
 ).replace(/\/$/, "");
 
 export function levelFromScore(s: number): Level {
@@ -192,48 +192,42 @@ export async function fetchVHData(base = API_BASE, mode: Mode = "temporal"): Pro
 }
 
 /* ── React context ──────────────────────────────────────────────────────────*/
-export interface VHContextValue extends VHState {
-  mode: Mode;
-  setMode: (m: Mode) => void;
-}
-
-const VHContext = createContext<VHContextValue>({
+const VHContext = createContext<VHState>({
   files: FALLBACK_FILES, meta: OFFLINE_META, sample: null,
-  mode: "temporal", setMode: () => {},
 });
 
-const CACHE_KEY = (mode: Mode) => `vh-data-v3-${mode}`;
+// v4 invalidates older caches — including any stale snapshot persisted while the
+// site was pointed at the dead api.visiblehand.dev domain.
+const CACHE_KEY = "vh-data-v4";
 
-function readCache(mode: Mode): VHState {
+function readCache(): VHState {
   try {
-    const c = sessionStorage.getItem(CACHE_KEY(mode));
+    const c = sessionStorage.getItem(CACHE_KEY);
     if (c) { const p = JSON.parse(c); if (p && p.files) return p as VHState; }
   } catch { /* ignore */ }
-  return { files: FALLBACK_FILES, meta: { ...OFFLINE_META, mode }, sample: null };
+  return { files: FALLBACK_FILES, meta: OFFLINE_META, sample: null };
 }
 
 export function VHProvider({ children }: { children: ReactNode }) {
-  // Two measurement modes (mirrors the API): temporal (vs own history) and
-  // cross_sectional (vs peer + anchor baseline). Stale-while-revalidate per mode
-  // so switching is instant from cache, then refreshes from the API.
-  const [mode, setMode] = useState<Mode>("temporal");
-  const [state, setState] = useState<VHState>(() => readCache("temporal"));
+  // Live scores in the canonical temporal mode (each country vs its own history —
+  // the persisted series the deltas/movers also align to). Stale-while-revalidate:
+  // instant paint from cache/snapshot, then a single refresh from the API.
+  const [state, setState] = useState<VHState>(() => readCache());
 
   useEffect(() => {
     let alive = true;
-    setState(readCache(mode));               // instant hydrate for this mode
-    fetchVHData(API_BASE, mode)
+    fetchVHData(API_BASE, "temporal")
       .then((s) => {
         if (!alive) return;
         setState(s);
-        try { sessionStorage.setItem(CACHE_KEY(mode), JSON.stringify(s)); } catch { /* ignore */ }
+        try { sessionStorage.setItem(CACHE_KEY, JSON.stringify(s)); } catch { /* ignore */ }
       })
       .catch(() => { /* keep cached / snapshot */ });
     return () => { alive = false; };
-  }, [mode]);
+  }, []);
 
   return (
-    <VHContext.Provider value={{ ...state, mode, setMode }}>
+    <VHContext.Provider value={state}>
       {children}
     </VHContext.Provider>
   );

@@ -1,4 +1,4 @@
-# VisibleHand — Consumer Website
+﻿# VisibleHand â€” Consumer Website
 
 The public landing page for **visiblehand.xyz**. Vite + React 18 + TypeScript +
 Tailwind v4. The country scores, ticker, signal panels, methodology weights,
@@ -11,11 +11,11 @@ All data flows through [`src/app/data.tsx`](src/app/data.tsx):
 
 - On mount it calls, in parallel, `GET /risk/compare`, `GET /calibration/roc`,
   and `GET /health` on the API, then merges the results over a static snapshot.
-- **API reachable** → live scores/levels/drivers, live country count and
-  calibration; the nav shows a green **LIVE · <date>** badge.
-- **API down / blocked** → the static snapshot renders unchanged; the nav shows
+- **API reachable** â†’ live scores/levels/drivers, live country count and
+  calibration; the nav shows a green **LIVE Â· <date>** badge.
+- **API down / blocked** â†’ the static snapshot renders unchanged; the nav shows
   an amber **SNAPSHOT** badge. The site never errors or shows empty state.
-- ISO-3 (site) ↔ ISO-2 (API) codes are mapped automatically. Countries the API
+- ISO-3 (site) â†” ISO-2 (API) codes are mapped automatically. Countries the API
   doesn't serve (e.g. Iran, Zimbabwe) keep their snapshot values.
 - Calibration figures are only shown live when in a believable range; a
   degenerate demo backtest falls back to the documented out-of-sample numbers.
@@ -25,7 +25,7 @@ All data flows through [`src/app/data.tsx`](src/app/data.tsx):
 ```bash
 cp .env.example .env
 # .env
-VITE_API_BASE=https://api.visiblehand.dev      # default if unset
+VITE_API_BASE=https://api.visiblehand.xyz      # default if unset
 # local dev against your own API:
 # VITE_API_BASE=http://localhost:8080
 ```
@@ -38,16 +38,16 @@ cross-origin from any deploy domain.
 ```bash
 npm install
 npm run dev        # http://localhost:5173
-npm run build      # → dist/   (≈197 kB JS / 61 kB gzip)
+npm run build      # â†’ dist/   (â‰ˆ197 kB JS / 61 kB gzip)
 npm run preview    # serve the production build
 ```
 
 ## Deploy (Vercel)
 
-1. Import `nenticul/VisibleHand` → set **Root Directory** = `website`.
+1. Import `nenticul/VisibleHand` â†’ set **Root Directory** = `website`.
 2. Build command `npm run build`, output `dist` (auto-detected).
-3. Add env var `VITE_API_BASE` = your API URL (e.g. `https://api.visiblehand.dev`).
-4. Add the domain `visiblehand.xyz` in Project → Domains.
+3. Add env var `VITE_API_BASE` = your API URL (e.g. `https://api.visiblehand.xyz`).
+4. Add the domain `visiblehand.xyz` in Project â†’ Domains.
 
 DNS (registrar):
 
@@ -63,12 +63,12 @@ Point the API subdomain at your API host (Railway/Fly/etc.) and set
 
 ```
 website/
-├── index.html              # title/meta/OG, favicon, indexable
-├── src/
-│   ├── main.tsx
-│   ├── styles/             # fonts.css · tailwind.css (v4) · theme.css
-│   └── app/
-│       ├── App.tsx         # the whole site (sections read live data via useVH)
-│       └── data.tsx        # live API client + React context + fallback snapshot
-└── public/favicon.svg
+â”œâ”€â”€ index.html              # title/meta/OG, favicon, indexable
+â”œâ”€â”€ src/
+â”‚   â”œâ”€â”€ main.tsx
+â”‚   â”œâ”€â”€ styles/             # fonts.css Â· tailwind.css (v4) Â· theme.css
+â”‚   â””â”€â”€ app/
+â”‚       â”œâ”€â”€ App.tsx         # the whole site (sections read live data via useVH)
+â”‚       â””â”€â”€ data.tsx        # live API client + React context + fallback snapshot
+â””â”€â”€ public/favicon.svg
 ```

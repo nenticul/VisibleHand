@@ -1,4 +1,4 @@
-# Python SDK
+﻿# Python SDK
 
 ## Installation
 
@@ -17,7 +17,7 @@ cd sdk && pip install -e .
 from visiblehand import Client
 
 client = Client(
-    base_url="https://api.visiblehand.dev",  # or your self-hosted URL
+    base_url="https://api.visiblehand.xyz",  # or your self-hosted URL
     api_key="optional-key",
 )
 
