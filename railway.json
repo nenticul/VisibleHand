@@ -5,6 +5,7 @@
     "dockerfilePath": "Dockerfile"
   },
   "deploy": {
+    "predeploy": "alembic upgrade head",
     "startCommand": "uvicorn api.main:app --host 0.0.0.0 --port $PORT",
     "healthcheckPath": "/health/live",
     "healthcheckTimeout": 120,

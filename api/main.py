@@ -41,16 +41,6 @@ async def lifespan(app: FastAPI):
     configure_observability(settings)
     log.info("VisibleHand starting (env=%s version=0.3.0)", settings.environment)
 
-    # Run database migrations on startup
-    try:
-        from alembic.config import Config
-        from alembic import command
-        alembic_cfg = Config("alembic.ini")
-        command.upgrade(alembic_cfg, "head")
-        log.info("database migrations applied")
-    except Exception as exc:
-        log.warning("migrations failed (DB may not be ready): %s", exc)
-
     scheduler = None
     if settings.ingestion_enabled:
         try:
