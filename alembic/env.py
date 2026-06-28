@@ -7,7 +7,13 @@ from alembic import context
 from api.models.database import Base
 
 config = context.config
-config.set_main_option("sqlalchemy.url", os.environ["DATABASE_URL"])
+database_url = os.environ.get("DATABASE_URL")
+if not database_url:
+    raise RuntimeError(
+        "DATABASE_URL environment variable is not set. "
+        "In Railway: add DATABASE_URL = ${{Postgres.DATABASE_URL}} to your service variables."
+    )
+config.set_main_option("sqlalchemy.url", database_url)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
