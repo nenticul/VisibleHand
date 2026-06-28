@@ -112,12 +112,14 @@ export async function fetchVHData(base = API_BASE): Promise<VHState> {
   const meta: VHMeta = { ...OFFLINE_META };
   let sample: any = null;
 
-  const [compareR, rocR, healthR] = await Promise.allSettled([
+  const [compareR, rocR, healthR, moversR] = await Promise.allSettled([
     getJSON(`${base}/risk/compare?countries=${FETCH_CODES.join(",")}`),
     getJSON(`${base}/calibration/roc`),
     getJSON(`${base}/health`),
+    getJSON(`${base}/risk/movers?days=7&limit=60`),
   ]);
 
+  const liveCodes: string[] = [];
   if (compareR.status === "fulfilled" && Array.isArray(compareR.value)) {
     const confs: number[] = [];
     let latest = "";
@@ -134,9 +136,10 @@ export async function fetchVHData(base = API_BASE): Promise<VHState> {
         name: r.name || files[iso3].name,
         score: Math.round(score * 10) / 10,
         level: levelFromScore(score),
-        delta: files[iso3].delta,          // 7-day delta stays editorial (seed has no live history)
+        delta: files[iso3].delta,          // overwritten from /risk/movers below when live
         drivers: d3,
       };
+      liveCodes.push(iso3);
       if (typeof r.confidence === "number") confs.push(r.confidence);
       if (typeof r.updated_at === "string" && r.updated_at > latest) latest = r.updated_at;
       if ((r.country || "").toUpperCase() === "BR") sample = r;
@@ -146,6 +149,18 @@ export async function fetchVHData(base = API_BASE): Promise<VHState> {
     if (confs.length) {
       const s = [...confs].sort((a, b) => a - b);
       meta.confidenceFloor = Math.round(s[Math.floor(s.length / 2)] * 100) / 100;
+    }
+  }
+
+  if (moversR.status === "fulfilled" && Array.isArray(moversR.value) && moversR.value.length) {
+    const dmap: Record<string, number> = {};
+    for (const mv of moversR.value) {
+      if (mv && typeof mv.delta === "number") dmap[(mv.country || "").toUpperCase()] = mv.delta;
+    }
+    // A live 7-day delta window exists → apply real deltas (0 where unchanged).
+    for (const iso3 of liveCodes) {
+      const iso2 = ISO3_TO_ISO2[iso3];
+      if (iso2) files[iso3].delta = dmap[iso2] ?? 0;
     }
   }
 
@@ -175,15 +190,28 @@ const VHContext = createContext<VHState>({
   files: FALLBACK_FILES, meta: OFFLINE_META, sample: null,
 });
 
+const CACHE_KEY = "vh-data-v1";
+
 export function VHProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<VHState>({
-    files: FALLBACK_FILES, meta: OFFLINE_META, sample: null,
+  // Stale-while-revalidate: hydrate instantly from this-session cache (so repeat
+  // navigations show live numbers with no snapshot flash), then refresh in the
+  // background. Falls back to the static snapshot on a cold load.
+  const [state, setState] = useState<VHState>(() => {
+    try {
+      const c = sessionStorage.getItem(CACHE_KEY);
+      if (c) { const p = JSON.parse(c); if (p && p.files) return p as VHState; }
+    } catch { /* ignore */ }
+    return { files: FALLBACK_FILES, meta: OFFLINE_META, sample: null };
   });
   useEffect(() => {
     let alive = true;
     fetchVHData()
-      .then((s) => { if (alive) setState(s); })
-      .catch(() => { /* keep snapshot */ });
+      .then((s) => {
+        if (!alive) return;
+        setState(s);
+        try { sessionStorage.setItem(CACHE_KEY, JSON.stringify(s)); } catch { /* ignore */ }
+      })
+      .catch(() => { /* keep cached / snapshot */ });
     return () => { alive = false; };
   }, []);
   return <VHContext.Provider value={state}>{children}</VHContext.Provider>;

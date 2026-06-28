@@ -71,9 +71,12 @@ function useAsciiPhysics() {
   },[captureRest]);
 
   useEffect(()=>{
+    const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduce) return;   // keep the title static for reduced-motion users
     const onMove = (e:MouseEvent) => { mouse.current = {x:e.clientX, y:e.clientY}; };
     window.addEventListener("mousemove", onMove, {passive:true});
     const SPRING=0.055, DAMPING=0.72, RADIUS=160, FORCE=28;
+    let running=false, visible=true;
 
     const tick = (time:number) => {
       const mx = mouse.current.x + window.scrollX;
@@ -100,10 +103,16 @@ function useAsciiPhysics() {
           el.style.transform = `translate(${p.x.toFixed(2)}px,${p.y.toFixed(2)}px) rotate(${(v.x*0.6).toFixed(2)}deg)`;
         }
       }
-      raf.current = requestAnimationFrame(tick);
+      if (running) raf.current = requestAnimationFrame(tick);
     };
-    raf.current = requestAnimationFrame(tick);
-    return()=>{ cancelAnimationFrame(raf.current); window.removeEventListener("mousemove",onMove); };
+    const start=()=>{ if(!running){ running=true; raf.current=requestAnimationFrame(tick); } };
+    const stop =()=>{ running=false; cancelAnimationFrame(raf.current); };
+    const hero=document.getElementById("top");
+    const io=new IntersectionObserver(([e])=>{ visible=e.isIntersecting; (visible && !document.hidden) ? start() : stop(); },{threshold:0});
+    if(hero) io.observe(hero); else start();
+    const onVis=()=>{ document.hidden ? stop() : (visible && start()); };
+    document.addEventListener("visibilitychange", onVis);
+    return()=>{ stop(); io.disconnect(); document.removeEventListener("visibilitychange",onVis); window.removeEventListener("mousemove",onMove); };
   },[]);
 
   return spanRefs;
@@ -119,8 +128,12 @@ function AsciiTitle() {
         fontFamily: "'JetBrains Mono', monospace",
         fontSize: "clamp(6px, 1.45vw, 21px)",
         lineHeight: 1.25,
-        overflowX: "auto",
-        overflowY: "visible",
+        // `clip` (not auto/hidden) so character transforms never expand a
+        // scroll area or flicker a scrollbar; the margin lets the springy
+        // glyphs overflow visually without being cut.
+        overflow: "clip",
+        overflowClipMargin: "60px",
+        maxWidth: "100%",
       }}
     >
       {VH_ASCII.map((line, row) => (
@@ -150,39 +163,6 @@ function AsciiTitle() {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   NEON MOTTO  ·  Sacramento cursive, flicker on scroll
-═══════════════════════════════════════════════════════════════════════════ */
-function NeonMotto() {
-  const [flicker, setFlicker] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(()=>{
-    const obs = new IntersectionObserver(([e])=>{
-      if (e.isIntersecting) {
-        setFlicker(false);
-        const t = setTimeout(()=>setFlicker(true), 80);
-        return ()=>clearTimeout(t);
-      }
-    }, { threshold: 0.6 });
-    if (ref.current) obs.observe(ref.current);
-    return ()=>obs.disconnect();
-  },[]);
-  return (
-    <div ref={ref} className="mt-4 select-none">
-      <span style={{
-        fontFamily: "'Sacramento', cursive",
-        fontSize: "clamp(28px, 3.8vw, 56px)",
-        color: "#FFB830",
-        textShadow: "0 0 8px #FFB830, 0 0 22px #FF8C00, 0 0 44px #FF6B00",
-        animation: flicker ? "neonFlicker 2.8s ease-out forwards" : "none",
-        lineHeight: 1.2,
-      }}>
-        Open Signals for Closed Markets.
-      </span>
-    </div>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════
    TERRAIN CANVAS  ·  black ink on paper
 ═══════════════════════════════════════════════════════════════════════════ */
 const TerrainCanvas=memo(function TerrainCanvas({opacity=1}:{opacity?:number}){
@@ -191,7 +171,8 @@ const TerrainCanvas=memo(function TerrainCanvas({opacity=1}:{opacity?:number}){
   useEffect(()=>{
     const canvas=ref.current; if(!canvas)return;
     const ctx=canvas.getContext("2d"); if(!ctx)return;
-    let W=0,H=0;
+    const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    let W=0,H=0, running=false, visible=true, io:IntersectionObserver|null=null;
     const resize=()=>{
       const r=canvas.getBoundingClientRect(),dpr=window.devicePixelRatio||1;
       canvas.width=(W=r.width)*dpr; canvas.height=(H=r.height)*dpr; ctx.scale(dpr,dpr);
@@ -239,10 +220,18 @@ const TerrainCanvas=memo(function TerrainCanvas({opacity=1}:{opacity?:number}){
       }
       ctx.beginPath(); ctx.moveTo(0,HOR); ctx.lineTo(W,HOR);
       ctx.strokeStyle=`rgba(16,14,12,${0.05*opacity})`; ctx.lineWidth=0.5; ctx.stroke();
-      raf.current=requestAnimationFrame(draw);
+      if(running) raf.current=requestAnimationFrame(draw);
     };
-    draw();
-    return()=>{ cancelAnimationFrame(raf.current); ro.disconnect(); };
+    const start=()=>{ if(!running && !reduce){ running=true; raf.current=requestAnimationFrame(draw); } };
+    const stop =()=>{ running=false; cancelAnimationFrame(raf.current); };
+    if(reduce){ draw(); }   // single static frame for reduced-motion
+    else {
+      io=new IntersectionObserver(([e])=>{ visible=e.isIntersecting; (visible && !document.hidden)?start():stop(); },{threshold:0});
+      io.observe(canvas);
+    }
+    const onVis=()=>{ document.hidden?stop():(visible&&start()); };
+    document.addEventListener("visibilitychange",onVis);
+    return()=>{ stop(); ro.disconnect(); io&&io.disconnect(); document.removeEventListener("visibilitychange",onVis); };
   },[opacity]);
   return <canvas ref={ref} className="absolute inset-0 w-full h-full" aria-hidden/>;
 });
@@ -272,7 +261,7 @@ const SignalFeed=memo(function SignalFeed(){
   const [boot,setBoot]=useState(0);const[booted,setBooted]=useState(false);
   const [lines,setLines]=useState<{code:string;ts:string}[]>([]);
   const [cur,setCur]=useState(true);const idx=useRef(0);
-  const BOOT=["> CONNECT VH-ARCHIVE ............ OK","> AUTH    PUBLIC ACCESS ........... OK","> INDEX   190+ FILES ............. OK","> STREAM  OPEN  ● LIVE","────────────────────────────────────"];
+  const BOOT=["> CONNECT VH-ARCHIVE ............ OK","> AUTH    PUBLIC ACCESS ........... OK","> INDEX   PUBLIC RECORD ......... OK","> STREAM  OPEN  ● LIVE","────────────────────────────────────"];
   useEffect(()=>{if(boot<BOOT.length){const t=setTimeout(()=>setBoot(s=>s+1),340);return()=>clearTimeout(t);}setBooted(true);},[boot]);
   useEffect(()=>{if(!booted)return;const t=setInterval(()=>{const code=STREAM_Q[idx.current%STREAM_Q.length]!;idx.current++;const d=new Date();const ts=`${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}:${String(d.getSeconds()).padStart(2,"0")}`;setLines(p=>[...p.slice(-9),{code,ts}]);},950);return()=>clearInterval(t);},[booted]);
   useEffect(()=>{const t=setInterval(()=>setCur(c=>!c),520);return()=>clearInterval(t);},[]);
@@ -438,16 +427,19 @@ function Stamp({text,color="#8D2F2F",angle=-4}:{text:string;color?:string;angle?
    CUSTOM CURSOR
 ═══════════════════════════════════════════════════════════════════════════ */
 function CustomCursor(){
-  const [pos,setPos]=useState({x:-200,y:-200});const [over,setOver]=useState(false);
+  const [over,setOver]=useState(false);
+  const ref=useRef<HTMLDivElement>(null);
   useEffect(()=>{
-    const mv=(e:MouseEvent)=>setPos({x:e.clientX,y:e.clientY});
+    let x=-200,y=-200,raf=0,pending=false;
+    const apply=()=>{ pending=false; const el=ref.current; if(el) el.style.transform=`translate(${x-1}px,${y-1}px)`; };
+    const mv=(e:MouseEvent)=>{ x=e.clientX; y=e.clientY; if(!pending){ pending=true; raf=requestAnimationFrame(apply); } };
     const en=(e:Event)=>{if((e.target as Element).closest("a,button"))setOver(true);};
     const lv=(e:Event)=>{if((e.target as Element).closest("a,button"))setOver(false);};
-    document.addEventListener("mousemove",mv);document.addEventListener("mouseover",en);document.addEventListener("mouseout",lv);
-    return()=>{document.removeEventListener("mousemove",mv);document.removeEventListener("mouseover",en);document.removeEventListener("mouseout",lv);};
+    document.addEventListener("mousemove",mv,{passive:true});document.addEventListener("mouseover",en,{passive:true});document.addEventListener("mouseout",lv,{passive:true});
+    return()=>{cancelAnimationFrame(raf);document.removeEventListener("mousemove",mv);document.removeEventListener("mouseover",en);document.removeEventListener("mouseout",lv);};
   },[]);
   return(
-    <div className="hidden lg:block fixed pointer-events-none z-[9999]" style={{left:pos.x,top:pos.y,transform:"translate(-1px,-1px)"}}>
+    <div ref={ref} className="hidden lg:block fixed top-0 left-0 pointer-events-none z-[9999]" style={{transform:"translate(-200px,-200px)"}}>
       <svg width="22" height="26" viewBox="0 0 22 26" fill="none" aria-hidden>
         {over?<><rect x="4" y="1" width="14" height="24" fill="#F4F2EA" stroke="#101010" strokeWidth="1.5"/><rect x="8" y="9" width="6" height="4" fill="#101010"/></>
           :<><path d="M2 0 L2 20 L6 15 L9 22 L12 21 L9 14 L16 14 Z" fill="#F4F2EA"/><path d="M2 0 L2 20 L6 15 L9 22 L12 21 L9 14 L16 14 Z" fill="none" stroke="#101010" strokeWidth="1.5"/></>}
@@ -519,22 +511,22 @@ function Nav(){
    HERO  ·  physics title floating above terrain
 ═══════════════════════════════════════════════════════════════════════════ */
 function Hero(){
+  const {meta}=useVH();
   return(
     <section id="top" className="relative min-h-screen overflow-hidden bg-[#F4F2EA]"
       style={{backgroundImage:"linear-gradient(#D8D4C925 1px,transparent 1px),linear-gradient(90deg,#D8D4C925 1px,transparent 1px)",backgroundSize:"40px 40px"}}>
       <TerrainCanvas opacity={0.5}/>
       <div className="absolute inset-0 pointer-events-none" style={{background:"linear-gradient(to bottom,#F4F2EA 0%,transparent 14%,transparent 78%,#F4F2EA 100%)"}}/>
       <div className="relative max-w-[1440px] mx-auto px-6 md:px-12 pt-[60px] pb-16 min-h-screen flex flex-col">
-        {/* ASCII art title + neon motto */}
+        {/* ASCII art title */}
         <div className="mb-6 md:mb-8">
           <AsciiTitle/>
-          <NeonMotto/>
         </div>
         {/* Content */}
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-8 lg:gap-12 mt-auto">
           <div>
             <div className={`${m} grid grid-cols-3 border-2 border-[#101010] mb-6`} style={{boxShadow:"4px 4px 0 #101010"}}>
-              {[["190+","COUNTRIES"],["20+","YEARS"],["DAILY","UPDATES"]].map(([n,l])=>(
+              {[[meta.scored?`${meta.scored}`:"190+","COUNTRIES"],["25+","YEARS"],["DAILY","UPDATES"]].map(([n,l])=>(
                 <div key={l} className="px-4 py-4 border-r-2 border-[#101010] last:border-0">
                   <div className="text-[28px] md:text-[36px] font-black leading-none text-[#101010]">{n}</div>
                   <div className="text-[9px] tracking-[0.14em] text-[#6B6660] mt-1">{l}</div>
@@ -1075,7 +1067,7 @@ function Footer(){
           ))}
         </div>
         <div className="border-t-2 border-[#101010] pt-6 flex flex-col md:flex-row md:items-baseline md:justify-between gap-3">
-          <p className="font-['EB_Garamond',serif] italic text-[19px] text-[#101010]">Open Signals for Closed Markets.</p>
+          <p className="font-['EB_Garamond',serif] italic text-[15px] text-[#6B6660]">Made by Anes&nbsp;Tamtam</p>
           <p className={`${m} text-[10px] tracking-[0.08em] text-[#6B6660]`}>© VISIBLEHAND {new Date().getFullYear()} · OPEN SOURCE</p>
         </div>
       </div>
@@ -1092,20 +1084,11 @@ export default function App(){
     <VHProvider>
     <div className="min-h-screen bg-[#F4F2EA] text-[#101010]" style={{fontFamily:"'Inter','Helvetica Neue',Arial,sans-serif",cursor:"none"}}>
       <style>{`
+        html{scroll-behavior:smooth}
+        html,body{overflow-x:clip;max-width:100%}
         @keyframes vhTick  { from{transform:translateX(0)} to{transform:translateX(-50%)} }
         @keyframes vhFade  { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes neonFlicker {
-          0%,100% { opacity:1; text-shadow:0 0 8px #FFB830,0 0 22px #FF8C00,0 0 44px #FF6B00; }
-          18%     { opacity:1; }
-          19%     { opacity:0.35; text-shadow:none; }
-          20%     { opacity:1; text-shadow:0 0 8px #FFB830,0 0 22px #FF8C00; }
-          22%     { opacity:0.25; text-shadow:none; }
-          23%     { opacity:1; }
-          52%     { opacity:1; }
-          53%     { opacity:0.55; }
-          54%     { opacity:1; }
-        }
-        @media (prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important;}}
+        @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*::before,*::after{transition:none!important;animation:none!important;}}
         ::-webkit-scrollbar{width:4px;height:4px}
         ::-webkit-scrollbar-track{background:transparent}
         ::-webkit-scrollbar-thumb{background:#D8D4C9}
