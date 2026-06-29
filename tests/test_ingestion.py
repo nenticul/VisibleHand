@@ -37,11 +37,13 @@ async def test_worldbank_handles_empty():
 
 @pytest.mark.asyncio
 async def test_fred_returns_empty_without_key():
-    os.environ.pop("FRED_API_KEY", None)
-    from api.config import get_settings
-    get_settings.cache_clear()
-    from core.ingestion.fred import fetch_fred_series
-    results = await fetch_fred_series("DGS10")
+    # Force the no-key state explicitly rather than relying on a local .env
+    # being empty (pydantic-settings reads the .env file as well as os.environ).
+    from types import SimpleNamespace
+    stub = SimpleNamespace(fred_api_key="")
+    with patch("core.ingestion.fred.get_settings", return_value=stub):
+        from core.ingestion.fred import fetch_fred_series
+        results = await fetch_fred_series("DGS10")
     assert results == []
 
 
