@@ -1432,66 +1432,135 @@ def _build_map(latest: list) -> str:
 # ── Studio: interactive data analysis & manipulation (vanilla JS, no libs) ───
 
 _STUDIO_CSS = """
-.studio-ctrls{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;
-  padding:10px 12px;background:#e7e4d6;border-bottom:2px solid #000}
-.sgrp{display:flex;flex-direction:column;gap:3px}
-.sgrp .gl{font:bold 9px Geneva,Verdana,sans-serif;letter-spacing:.06em;
-  text-transform:uppercase;color:#444}
-.wgt{display:flex;align-items:center;gap:6px}
-.wgt input[type=range]{-webkit-appearance:none;appearance:none;width:108px;height:6px;
-  background:#bdb89f;border:1px solid #000;outline:none}
-.wgt input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;
-  width:11px;height:16px;background:#1f5f3a;border:1px solid #000;cursor:ew-resize}
-.wgt input[type=range]::-moz-range-thumb{width:11px;height:16px;background:#1f5f3a;
-  border:1px solid #000;cursor:ew-resize}
-.wgt .wv{font:bold 11px "Cascadia Mono",Consolas,monospace;min-width:34px;text-align:right}
-.studio-sel,.studio-in{font:11px Geneva,Verdana,sans-serif;border:1px solid #000;
-  background:#fff;padding:2px 4px}
-.studio-in{width:120px}
-.sbtn{font:bold 10px Geneva,Verdana,sans-serif;background:#dcd8c8;border:1px solid #000;
-  box-shadow:1px 1px 0 #000;padding:3px 9px;cursor:pointer}
-.sbtn:active{box-shadow:0 0 0 #000;transform:translate(1px,1px)}
-.sbtn.go{background:#1f5f3a;color:#fff}
-.stbl{width:100%;border-collapse:collapse;font:11px Geneva,Verdana,sans-serif}
-.stbl th{background:#cfcab6;border:1px solid #000;padding:3px 6px;text-align:right;
-  cursor:pointer;white-space:nowrap;position:sticky;top:0}
+:root{
+  --bg:#080a08;--bg2:#0e120d;--bg3:#141a12;--panel:#0c0f0b;
+  --ink:#d2efd2;--dim:#739773;--faint:#3c4a39;
+  --line:#1f2a1c;--line2:#33442e;
+  --grn:#3df06f;--grn2:#27c659;--amb:#ffb22e;--red:#ff5b54;--cyn:#37e6e6;--mag:#ff63ef;
+  --mono:'JetBrains Mono','Cascadia Mono','SFMono-Regular',ui-monospace,Menlo,Consolas,'DejaVu Sans Mono',monospace;
+}
+*{box-sizing:border-box}
+body.term{margin:0;background:var(--bg);color:var(--ink);font-family:var(--mono);
+  font-size:13px;line-height:1.45;-webkit-font-smoothing:antialiased;min-height:100vh;
+  background-image:radial-gradient(120% 80% at 50% -20%,#10210f 0%,var(--bg) 55%);}
+.scanlines{position:fixed;inset:0;pointer-events:none;z-index:60;opacity:.30;mix-blend-mode:overlay;
+  background:repeating-linear-gradient(to bottom,rgba(0,0,0,0) 0 2px,rgba(0,0,0,.55) 2px 3px)}
+.term-wrap{max-width:1180px;margin:0 auto;padding:0 18px 40px;position:relative;z-index:1}
+.term-top{display:flex;justify-content:space-between;align-items:center;
+  padding:14px 4px 12px;border-bottom:2px solid var(--line2)}
+.tt-left{display:flex;align-items:center;gap:7px}
+.dot{width:13px;height:13px;border:2px solid #000;box-shadow:2px 2px 0 #000;display:inline-block}
+.dg{background:var(--grn)}.da{background:var(--amb)}.dr{background:var(--red)}
+.tt-title{font-weight:800;letter-spacing:.16em;font-size:15px;margin-left:10px}
+.tt-sl{color:var(--grn);margin:0 1px}
+.tt-right{display:flex;align-items:center;gap:10px;font-size:11px;color:var(--dim)}
+.tt-meta{border:1px solid var(--line2);padding:3px 8px;letter-spacing:.12em}
+.tt-clock{color:var(--grn);letter-spacing:.14em;font-weight:700}
+.tt-exit{color:var(--amb);text-decoration:none;border:1px solid var(--line2);padding:3px 8px;letter-spacing:.08em}
+.tt-exit:hover{background:var(--amb);color:#000}
+.term-boot{padding:11px 2px;color:var(--dim);font-size:12px;border-bottom:1px solid var(--line)}
+.term-boot b{color:var(--grn)}
+.bp{color:var(--grn);font-weight:800;margin-right:4px}
+.curs{color:var(--grn);animation:vhblink 1.05s steps(1) infinite;margin-left:3px}
+@keyframes vhblink{50%{opacity:0}}
+.term-body{padding-top:4px}
+
+.lab-hd{display:flex;align-items:center;gap:10px;margin:22px 0 0;
+  background:var(--grn);color:#04140b;font-weight:800;letter-spacing:.10em;text-transform:uppercase;
+  font-size:12px;padding:8px 13px;border:2px solid #000;box-shadow:6px 6px 0 #000}
+.hno{background:#04140b;color:var(--grn);padding:2px 8px;font-size:11px;letter-spacing:.1em}
+.hhint{font-weight:600;opacity:.78;text-transform:none;letter-spacing:0;font-size:11px;margin-left:auto}
+
+.studio-ctrls,.srcrow,.shockrow{display:flex;flex-wrap:wrap;gap:18px;align-items:flex-end;
+  padding:15px 15px;background:var(--panel);border:2px solid var(--line2);border-top:none;
+  box-shadow:6px 6px 0 #000;margin:0 0 4px}
+.srcrow{align-items:flex-start}
+.shockrow{align-items:flex-end}
+
+.sgrp{display:flex;flex-direction:column;gap:5px}
+.gl{font-weight:700;font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
+.wgt{display:flex;align-items:center;gap:9px}
+input[type=range]{-webkit-appearance:none;appearance:none;width:124px;height:8px;
+  background:#070a06;border:2px solid var(--line2);outline:none;cursor:ew-resize}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:12px;height:20px;
+  background:var(--grn);border:2px solid #000;box-shadow:2px 2px 0 #000;cursor:ew-resize}
+input[type=range]::-moz-range-thumb{width:12px;height:20px;background:var(--grn);border:2px solid #000;cursor:ew-resize}
+.wv{font-weight:800;font-size:12px;color:var(--grn);min-width:34px;text-align:right}
+.shk .wv{color:var(--amb)}
+
+.studio-sel,.studio-in,.focus-sel,#sqlq{font-family:var(--mono);font-size:12px;color:var(--ink);
+  background:#060805;border:2px solid var(--line2);padding:5px 7px;outline:none}
+.studio-sel:focus,.studio-in:focus,.focus-sel:focus,#sqlq:focus{border-color:var(--grn);
+  box-shadow:0 0 0 1px var(--grn),3px 3px 0 #000}
+.studio-in{width:140px}
+#sqlq{width:100%}
+
+.sbtn{font-family:var(--mono);font-weight:700;font-size:10px;letter-spacing:.07em;text-transform:uppercase;
+  background:var(--bg3);color:var(--ink);border:2px solid var(--line2);box-shadow:3px 3px 0 #000;
+  padding:6px 12px;cursor:pointer}
+.sbtn:hover{border-color:var(--grn);color:var(--grn)}
+.sbtn:active{box-shadow:0 0 0 #000;transform:translate(3px,3px)}
+.sbtn.go{background:var(--grn);color:#04140b;border-color:#000}
+.sbtn.go:hover{background:var(--cyn);color:#04140b}
+.sbtn:disabled{opacity:.4;cursor:not-allowed;box-shadow:1px 1px 0 #000;transform:none}
+
+.vrow{display:flex;gap:16px;margin:16px 0;flex-wrap:wrap}
+.vcard{background:var(--panel);border:2px solid var(--line2);box-shadow:6px 6px 0 #000;
+  padding:14px 15px;margin:16px 0}
+.vrow>.vcard{margin:0;flex:1;min-width:300px}
+.vh2{font-weight:800;text-transform:uppercase;letter-spacing:.05em;font-size:12px;color:var(--grn);
+  margin:0 0 4px;display:flex;align-items:center;gap:7px}
+.vh2::before{content:"\\25B8";color:var(--amb)}
+.vsub{font-size:11px;color:var(--dim);margin-bottom:9px;line-height:1.55}
+.mono{font-family:var(--mono)}
+
+.stbl{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11px}
+.stbl th{background:#0a0e09;color:var(--grn);border:1px solid var(--line2);padding:6px 7px;
+  text-align:right;cursor:pointer;white-space:nowrap;position:sticky;top:0;
+  text-transform:uppercase;letter-spacing:.05em;font-size:10px}
 .stbl th.l,.stbl td.l{text-align:left}
 .stbl th.on::after{content:" \\25BE";font-size:8px}
 .stbl th.on.asc::after{content:" \\25B4"}
-.stbl td{border:1px solid #cabfa0;padding:2px 6px;text-align:right}
-.stbl tr:nth-child(even) td{background:#f4f1e6}
-.stbl .dn{color:#1f5f3a}.stbl .up{color:#a8322f}
+.stbl td{border:1px solid var(--line);padding:4px 7px;text-align:right;color:var(--ink)}
+.stbl tr:nth-child(even) td{background:#0a0e09}
+.stbl tbody tr:hover td{background:#16240f;color:#fff}
+.stbl .dn{color:var(--grn)}.stbl .up{color:var(--red)}
+.tbl-scroll{max-height:320px;overflow:auto;border:2px solid var(--line2)}
+
 .scwrap{position:relative}
-#scTip{position:absolute;display:none;background:#000;color:#fff;font:10px monospace;
-  padding:2px 5px;pointer-events:none;white-space:nowrap;z-index:5}
-.toast{position:fixed;left:50%;bottom:38px;transform:translateX(-50%);background:#1f5f3a;
-  color:#fff;font:bold 11px Geneva,sans-serif;padding:7px 16px;border:2px solid #000;
-  box-shadow:2px 2px 0 #000;opacity:0;transition:opacity .2s;z-index:99}
+#scTip{position:absolute;display:none;background:#000;color:var(--grn);font-family:var(--mono);
+  font-size:10px;padding:3px 6px;pointer-events:none;white-space:nowrap;z-index:5;border:1px solid var(--grn)}
+.toast{position:fixed;left:50%;bottom:40px;transform:translateX(-50%);background:var(--grn);
+  color:#04140b;font-weight:800;font-size:12px;padding:9px 18px;border:2px solid #000;
+  box-shadow:4px 4px 0 #000;opacity:0;transition:opacity .2s;z-index:99;letter-spacing:.05em}
 .toast.show{opacity:1}
-.tbl-scroll{max-height:300px;overflow:auto;border:1px solid #000}
-.urlbox{font:10px "Cascadia Mono",Consolas,monospace;background:#f4f1e6;border:1px solid #999;
-  padding:4px 6px;margin-top:6px;word-break:break-all;color:#333}
-.srcrow{display:flex;flex-wrap:wrap;gap:18px;padding:8px 12px;background:#efece0;
-  border-bottom:1px solid #000;align-items:flex-start}
-.srcgrp{display:flex;flex-direction:column;gap:3px}
-.srctog{font:11px Geneva,Verdana,sans-serif;cursor:pointer;user-select:none}
+.urlbox{font-family:var(--mono);font-size:10px;background:#060805;border:1px solid var(--line2);
+  padding:6px 8px;margin-top:8px;word-break:break-all;color:var(--dim)}
+
+.srcgrp{display:flex;flex-direction:column;gap:5px}
+.srctog{font-size:12px;cursor:pointer;user-select:none;color:var(--ink)}
+.srctog input{accent-color:var(--grn)}
 .srctog.off{opacity:.4;text-decoration:line-through}
-.srcchips{display:flex;flex-wrap:wrap;gap:3px;max-width:230px}
-.srcchip{font:9px Geneva,Verdana,sans-serif;background:#fff;border:1px solid #b6b094;
-  padding:1px 5px;color:#555}
-.corr-c{font:9px Geneva,Verdana,sans-serif}
-.note-i{font:10px Geneva,Verdana,sans-serif;color:#666;padding:0 12px 8px}
-.lab-hd{font:bold 12px Geneva,Verdana,sans-serif;background:#1f5f3a;color:#fff;
-  padding:6px 12px;border-top:2px solid #000;border-bottom:1px solid #000;
-  letter-spacing:.04em;text-transform:uppercase}
-.shockrow{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;padding:9px 12px;
-  background:#eef0e6;border-bottom:1px solid #000}
-.shk .wv{color:#1f5f3a}
-.bandshift{font:10px "Cascadia Mono",Consolas,monospace}
-.focus-sel{font:11px Geneva,Verdana,sans-serif;border:1px solid #000;background:#fff;padding:2px 4px}
-.solve{font:11px Geneva,Verdana,sans-serif;line-height:1.7;background:#f4f1e6;
-  border:1px solid #cabfa0;padding:8px 10px;margin-top:6px}
-.solve b{font-family:"Cascadia Mono",Consolas,monospace}
+.srctog b{color:var(--grn)}
+.srcchips{display:flex;flex-wrap:wrap;gap:4px;max-width:250px}
+.srcchip{font-size:9px;background:#0a0e09;border:1px solid var(--line2);padding:2px 6px;
+  color:var(--dim);letter-spacing:.04em}
+
+.corr-c{font-family:var(--mono);font-size:11px;color:var(--ink)}
+.note-i{font-size:11px;color:var(--dim);padding:2px 2px 8px}
+.bandshift{font-family:var(--mono)}
+.solve{font-size:12px;line-height:1.8;background:#060805;border:2px solid var(--line2);
+  padding:11px 13px;margin-top:8px;color:var(--ink)}
+.solve b{color:var(--grn)}
+
+.term-nav{display:flex;align-items:center;gap:4px;margin-top:26px;padding:12px 4px;
+  border-top:2px solid var(--line2);flex-wrap:wrap}
+.nav-prompt{color:var(--grn);font-weight:800;margin-right:6px}
+.term-nav a{color:var(--dim);text-decoration:none;font-size:12px;padding:4px 10px;border:1px solid transparent;letter-spacing:.04em}
+.term-nav a:hover{color:var(--grn);border-color:var(--line2)}
+.term-nav a.on{color:#04140b;background:var(--grn);font-weight:700}
+.nav-site{margin-left:auto;color:var(--amb)!important}
+.nav-site:hover{color:#000!important;background:var(--amb)}
 """
 
 _STUDIO_AXES = [("comp", "Composite (re-blended)"), ("c", "Composite (published)"),
@@ -1542,16 +1611,25 @@ def _build_studio(latest: list) -> str:
     xopts = opts.replace('value="e"', 'value="e" selected')
     yopts = opts.replace('value="p"', 'value="p" selected')
 
-    head = _head("VisibleHand — Studio")
-    shell = f"""<body>
-{_menubar(["File","Edit","View","Data"])}
-<div class="desktop">
-<div class="window">
-{_titlebar("VisibleHand — Data Studio", "/")}
-<div class="statbar">
-  <span><span class="ldot"></span>{len(data)} countries &#183; drag weights to re-blend the composite live</span>
-  <span style="color:#555">linear re-blend of published sub-scores</span>
-</div>
+    head = (
+        '<!DOCTYPE html><html lang="en"><head>'
+        '<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+        '<title>VISIBLEHAND // TERMINAL</title>'
+        '<style>' + _STUDIO_CSS + '</style></head>'
+    )
+    shell = f"""<body class="term">
+<div class="scanlines"></div>
+<div class="term-wrap">
+<header class="term-top">
+  <div class="tt-left"><span class="dot dg"></span><span class="dot da"></span><span class="dot dr"></span>
+    <span class="tt-title">VISIBLEHAND<span class="tt-sl">//</span>RISK_TERMINAL</span></div>
+  <div class="tt-right"><span class="tt-meta">{len(data)} NODES</span>
+    <span id="termclock" class="tt-clock">--:--:--</span>
+    <a class="tt-exit" href="/">[ESC]</a></div>
+</header>
+<div class="term-boot"><span class="bp">&gt;</span>session online &#183; <b>{len(data)}</b> sovereign nodes loaded &#183; re-blend engine ready<span class="curs">&#9608;</span></div>
+<main class="term-body">
+<div class="lab-hd"><span class="hno">01</span> WEIGHT MATRIX <span class="hhint">// drag to re-blend the composite live</span></div>
 <div class="studio-ctrls">
   <div class="sgrp"><span class="gl">Economic <span id="we_v" class="wv">45</span></span>
     <span class="wgt"><input type="range" id="we" min="0" max="100" value="45"></span></div>
@@ -1719,8 +1797,15 @@ LIMIT 15;</textarea></div>
   <div class="vsub" style="padding:6px">Runs entirely in your browser — no server round-trip. DuckDB-WASM (~few MB) loads
     lazily from CDN on the first query. Full SQL: joins, aggregates, window functions, CORR, etc.</div>
 </div></div></div>
-{_tabbar([("Browse","/"),("Dashboard","/dashboard"),("Compare","/compare"),("Map","/map"),("Studio",""),("Validation","/validation"),("API","/api"),("",""),("Exit","/")], active="Studio")}
-</div></div>
+</main>
+<nav class="term-nav">
+  <span class="nav-prompt">&gt;</span>
+  <a href="/">browse</a><a href="/dashboard">dashboard</a><a href="/compare">compare</a>
+  <a href="/map">map</a><a class="on" href="/studio">studio</a><a href="/validation">validation</a>
+  <a href="/api">api</a>
+  <a class="nav-site" href="{SITE_URL}" target="_blank" rel="noopener">visiblehand.xyz &#8599;</a>
+</nav>
+</div>
 <div class="toast" id="toast"></div>
 """
     data_script = f'<script>window.VH_DATA={data_json};</script>'
@@ -1732,7 +1817,8 @@ _STUDIO_JS = r"""<script>(function(){
   var DATA = window.VH_DATA || [];
   var W = {e:45,p:25,n:20,g:10};
   var ACTIVE = {e:true,p:true,n:true,g:true};
-  var PAL = ["#5d7c4f","#8f9a45","#cf9f24","#c2702a","#a8322f"];
+  var PAL = ["#3df06f","#9fe04a","#ffb22e","#ff8a3d","#ff5b54"];
+  var T_BG="#0a0e09", T_GRID="#1b2418", T_LINE="#33442e", T_DIM="#739773", T_INK="#d2efd2", T_GRN="#3df06f";
   var AXL = {comp:"Composite",c:"Composite (pub)",e:"Economic",p:"Political",n:"NLP",g:"Governance",conf:"Confidence"};
   var sortKey="comp", sortAsc=false;
   var $ = function(id){return document.getElementById(id);};
@@ -1781,10 +1867,10 @@ _STUDIO_JS = r"""<script>(function(){
     return den>0?num/den:null;
   }
   function corrColor(r){
-    if(r==null) return "#eee";
+    if(r==null) return "#11160f";
     var a=Math.abs(r);
-    if(r>=0) return "rgba(168,50,47,"+(0.12+0.78*a).toFixed(2)+")";
-    return "rgba(47,80,120,"+(0.12+0.78*a).toFixed(2)+")";
+    if(r>=0) return "rgba(61,240,111,"+(0.10+0.80*a).toFixed(2)+")";
+    return "rgba(55,230,230,"+(0.10+0.80*a).toFixed(2)+")";
   }
 
   // ---- Correlation matrix ----
@@ -1797,11 +1883,11 @@ _STUDIO_JS = r"""<script>(function(){
       for(var j=0;j<keys.length;j++){
         var r=(i===j)?1:pearson(cols[i],cols[j]);
         var x=pad+j*cell, y=pad+i*cell;
-        s+='<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+cell.toFixed(1)+'" height="'+cell.toFixed(1)+'" fill="'+corrColor(r)+'" stroke="#fff"/>';
-        s+='<text x="'+(x+cell/2).toFixed(1)+'" y="'+(y+cell/2+3).toFixed(1)+'" text-anchor="middle" fill="#222" font-size="9">'+(r==null?"—":r.toFixed(2))+'</text>';
+        s+='<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+cell.toFixed(1)+'" height="'+cell.toFixed(1)+'" fill="'+corrColor(r)+'" stroke="#0a0e09"/>';
+        s+='<text x="'+(x+cell/2).toFixed(1)+'" y="'+(y+cell/2+3).toFixed(1)+'" text-anchor="middle" fill="'+T_INK+'" font-size="9">'+(r==null?"—":r.toFixed(2))+'</text>';
       }
-      s+='<text x="'+(pad-5)+'" y="'+(pad+i*cell+cell/2+3).toFixed(1)+'" text-anchor="end" fill="#444" font-size="9">'+keys[i][1]+'</text>';
-      s+='<text x="'+(pad+i*cell+cell/2).toFixed(1)+'" y="'+(pad-6)+'" text-anchor="middle" fill="#444" font-size="9">'+keys[i][1]+'</text>';
+      s+='<text x="'+(pad-5)+'" y="'+(pad+i*cell+cell/2+3).toFixed(1)+'" text-anchor="end" fill="'+T_DIM+'" font-size="9">'+keys[i][1]+'</text>';
+      s+='<text x="'+(pad+i*cell+cell/2).toFixed(1)+'" y="'+(pad-6)+'" text-anchor="middle" fill="'+T_DIM+'" font-size="9">'+keys[i][1]+'</text>';
     }
     s+='</svg>'; $("corr").innerHTML=s;
   }
@@ -1818,10 +1904,10 @@ _STUDIO_JS = r"""<script>(function(){
       .sort(function(a,b){return Math.abs(b.delta)-Math.abs(a.delta);}).slice(0,6);
     html+='<div><b>Biggest movers</b> vs published composite</div><div style="margin-top:4px">';
     moved.forEach(function(d){
-      var up=d.delta>=0, col=up?"#a8322f":"#1f5f3a";
+      var up=d.delta>=0, col=up?"#ff5b54":"#3df06f";
       html+='<div style="display:flex;gap:8px;align-items:center;margin:2px 0">'
         +'<span class="mono" style="width:30px"><b>'+d.code+'</b></span>'
-        +'<span style="flex:1;height:9px;background:#fff;border:1px solid #000;position:relative">'
+        +'<span style="flex:1;height:9px;background:#0a0e09;border:1px solid #33442e;position:relative">'
         +'<span style="position:absolute;'+(up?"left:50%":"right:50%")+';top:0;bottom:0;width:'
         +Math.min(50,Math.abs(d.delta)*2.2).toFixed(1)+'%;background:'+col+'"></span></span>'
         +'<span class="mono" style="width:46px;text-align:right;color:'+col+'">'+(up?"+":"")+d.delta.toFixed(1)+'</span></div>';
@@ -1835,23 +1921,23 @@ _STUDIO_JS = r"""<script>(function(){
     $("xlbl").textContent=AXL[xk]; $("ylbl").textContent=AXL[yk];
     var X=function(v){return pad+(w-2*pad)*(v/100);};
     var Y=function(v){return (h-pad)-(h-2*pad)*(v/100);};
-    var s='<svg viewBox="0 0 '+w+' '+h+'" width="100%" xmlns="http://www.w3.org/2000/svg" style="font:10px Geneva,sans-serif">';
-    s+='<rect x="'+pad+'" y="'+pad+'" width="'+(w-2*pad)+'" height="'+(h-2*pad)+'" fill="#fbfaf4" stroke="#000"/>';
+    var s='<svg viewBox="0 0 '+w+' '+h+'" width="100%" xmlns="http://www.w3.org/2000/svg" style="font:10px var(--mono,monospace)">';
+    s+='<rect x="'+pad+'" y="'+pad+'" width="'+(w-2*pad)+'" height="'+(h-2*pad)+'" fill="'+T_BG+'" stroke="'+T_LINE+'"/>';
     for(var t=0;t<=100;t+=20){
-      s+='<line x1="'+X(t)+'" y1="'+pad+'" x2="'+X(t)+'" y2="'+(h-pad)+'" stroke="#e3decd"/>';
-      s+='<line x1="'+pad+'" y1="'+Y(t)+'" x2="'+(w-pad)+'" y2="'+Y(t)+'" stroke="#e3decd"/>';
-      s+='<text x="'+X(t)+'" y="'+(h-pad+14)+'" text-anchor="middle" fill="#777">'+t+'</text>';
-      s+='<text x="'+(pad-8)+'" y="'+(Y(t)+3)+'" text-anchor="end" fill="#777">'+t+'</text>';
+      s+='<line x1="'+X(t)+'" y1="'+pad+'" x2="'+X(t)+'" y2="'+(h-pad)+'" stroke="'+T_GRID+'"/>';
+      s+='<line x1="'+pad+'" y1="'+Y(t)+'" x2="'+(w-pad)+'" y2="'+Y(t)+'" stroke="'+T_GRID+'"/>';
+      s+='<text x="'+X(t)+'" y="'+(h-pad+14)+'" text-anchor="middle" fill="'+T_DIM+'">'+t+'</text>';
+      s+='<text x="'+(pad-8)+'" y="'+(Y(t)+3)+'" text-anchor="end" fill="'+T_DIM+'">'+t+'</text>';
     }
-    s+='<text x="'+(w/2)+'" y="'+(h-8)+'" text-anchor="middle" fill="#333" font-weight="bold">'+AXL[xk]+'</text>';
-    s+='<text x="14" y="'+(h/2)+'" text-anchor="middle" fill="#333" font-weight="bold" transform="rotate(-90 14 '+(h/2)+')">'+AXL[yk]+'</text>';
+    s+='<text x="'+(w/2)+'" y="'+(h-8)+'" text-anchor="middle" fill="'+T_INK+'" font-weight="bold">'+AXL[xk]+'</text>';
+    s+='<text x="14" y="'+(h/2)+'" text-anchor="middle" fill="'+T_INK+'" font-weight="bold" transform="rotate(-90 14 '+(h/2)+')">'+AXL[yk]+'</text>';
     var pts=[];
     rows.forEach(function(d){
       var xv=axval(d,xk), yv=axval(d,yk); if(xv==null||yv==null)return;
       pts.push([xv,yv]);
       var r=5+(d.comp||0)/100*7;
       s+='<circle cx="'+X(xv).toFixed(1)+'" cy="'+Y(yv).toFixed(1)+'" r="'+r.toFixed(1)+'" fill="'+color(d.comp)+'" fill-opacity="0.78" stroke="#000" stroke-width="0.6" data-c="'+d.code+'" data-x="'+xv.toFixed(1)+'" data-y="'+yv.toFixed(1)+'" data-comp="'+fmt(d.comp)+'"/>';
-      s+='<text x="'+X(xv).toFixed(1)+'" y="'+(Y(yv)-r-2).toFixed(1)+'" text-anchor="middle" fill="#222" font-size="8">'+d.code+'</text>';
+      s+='<text x="'+X(xv).toFixed(1)+'" y="'+(Y(yv)-r-2).toFixed(1)+'" text-anchor="middle" fill="'+T_INK+'" font-size="8">'+d.code+'</text>';
     });
     var fit=ols(pts);
     if(fit){
@@ -1862,7 +1948,7 @@ _STUDIO_JS = r"""<script>(function(){
         if(y2<0){x2=(0-fit.a)/fit.b;y2=0;} if(y2>100){x2=(100-fit.a)/fit.b;y2=100;}
       }
       x1=Math.max(0,Math.min(100,x1)); x2=Math.max(0,Math.min(100,x2));
-      s+='<line x1="'+X(x1).toFixed(1)+'" y1="'+Y(y1).toFixed(1)+'" x2="'+X(x2).toFixed(1)+'" y2="'+Y(y2).toFixed(1)+'" stroke="#1f5f3a" stroke-width="1.6" stroke-dasharray="5 3"/>';
+      s+='<line x1="'+X(x1).toFixed(1)+'" y1="'+Y(y1).toFixed(1)+'" x2="'+X(x2).toFixed(1)+'" y2="'+Y(y2).toFixed(1)+'" stroke="'+T_GRN+'" stroke-width="1.6" stroke-dasharray="5 3"/>';
     }
     s+='</svg>';
     $("scatter").innerHTML=s;
@@ -1884,13 +1970,13 @@ _STUDIO_JS = r"""<script>(function(){
     var w=400,h=300,pad=34, bins=new Array(10).fill(0);
     rows.forEach(function(d){ if(d.comp!=null){ var b=Math.min(9,Math.floor(d.comp/10)); bins[b]++; } });
     var mx=Math.max.apply(null,bins)||1, bw=(w-2*pad)/10;
-    var s='<svg viewBox="0 0 '+w+' '+h+'" width="100%" xmlns="http://www.w3.org/2000/svg" style="font:9px Geneva,sans-serif">';
-    s+='<line x1="'+pad+'" y1="'+(h-pad)+'" x2="'+(w-pad)+'" y2="'+(h-pad)+'" stroke="#000"/>';
+    var s='<svg viewBox="0 0 '+w+' '+h+'" width="100%" xmlns="http://www.w3.org/2000/svg" style="font:9px var(--mono,monospace)">';
+    s+='<line x1="'+pad+'" y1="'+(h-pad)+'" x2="'+(w-pad)+'" y2="'+(h-pad)+'" stroke="'+T_LINE+'"/>';
     bins.forEach(function(cnt,i){
       var bh=(h-2*pad)*(cnt/mx), x=pad+i*bw, y=(h-pad)-bh;
-      s+='<rect x="'+(x+1).toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+(bw-2).toFixed(1)+'" height="'+bh.toFixed(1)+'" fill="'+PAL[Math.min(4,Math.floor(i/2))]+'" stroke="#000" stroke-width="0.5"/>';
-      if(cnt)s+='<text x="'+(x+bw/2).toFixed(1)+'" y="'+(y-3).toFixed(1)+'" text-anchor="middle" fill="#333">'+cnt+'</text>';
-      s+='<text x="'+(x+bw/2).toFixed(1)+'" y="'+(h-pad+12)+'" text-anchor="middle" fill="#888">'+(i*10)+'</text>';
+      s+='<rect x="'+(x+1).toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+(bw-2).toFixed(1)+'" height="'+bh.toFixed(1)+'" fill="'+PAL[Math.min(4,Math.floor(i/2))]+'" stroke="#04140b" stroke-width="0.5"/>';
+      if(cnt)s+='<text x="'+(x+bw/2).toFixed(1)+'" y="'+(y-3).toFixed(1)+'" text-anchor="middle" fill="'+T_INK+'">'+cnt+'</text>';
+      s+='<text x="'+(x+bw/2).toFixed(1)+'" y="'+(h-pad+12)+'" text-anchor="middle" fill="'+T_DIM+'">'+(i*10)+'</text>';
     });
     s+='</svg>'; $("hist").innerHTML=s;
   }
@@ -1961,8 +2047,8 @@ _STUDIO_JS = r"""<script>(function(){
     var html="";
     rows.forEach(function(r){
       var b0=band(r.base), b1=band(r.scn);
-      var shift=(b0===b1)?'<span style="color:#999">—</span>':
-        '<span class="bandshift" style="color:'+(b1>b0?"#a8322f":"#1f5f3a")+'">'
+      var shift=(b0===b1)?'<span style="color:#739773">—</span>':
+        '<span class="bandshift" style="color:'+(b1>b0?"#ff5b54":"#3df06f")+'">'
         +BANDS[b0]+(b1>b0?" &#8593; ":" &#8595; ")+BANDS[b1]+'</span>';
       var dc=r.delta>=0?"up":"dn", ds=(r.delta>=0?"+":"")+r.delta.toFixed(1);
       html+='<tr><td class="l"><b>'+r.code+'</b> <span style="color:#888">'+r.name+'</span></td>'
@@ -1985,21 +2071,21 @@ _STUDIO_JS = r"""<script>(function(){
     });
     var mAbs=1; bars.forEach(function(b){ mAbs=Math.max(mAbs,Math.abs(b.up),Math.abs(b.dn)); });
     var w=300,rowh=26,h=bars.length*rowh+22,midx=w/2,half=midx-80;
-    var s='<svg viewBox="0 0 '+w+' '+h+'" width="100%" style="font:10px Geneva,sans-serif">';
-    s+='<line x1="'+midx+'" y1="6" x2="'+midx+'" y2="'+(h-16)+'" stroke="#000"/>';
+    var s='<svg viewBox="0 0 '+w+' '+h+'" width="100%" style="font:10px var(--mono,monospace)">';
+    s+='<line x1="'+midx+'" y1="6" x2="'+midx+'" y2="'+(h-16)+'" stroke="'+T_LINE+'"/>';
     bars.forEach(function(b,i){
       var y=10+i*rowh;
       if(!b.na){
         var wu=(b.up/mAbs)*half, wd=(b.dn/mAbs)*half;
-        s+='<rect x="'+Math.min(midx,midx+wu).toFixed(1)+'" y="'+y+'" width="'+Math.abs(wu).toFixed(1)+'" height="9" fill="#a8322f" stroke="#000" stroke-width="0.5"><title>+10 &#8594; '+(b.up>=0?"+":"")+b.up.toFixed(1)+'</title></rect>';
-        s+='<rect x="'+Math.min(midx,midx+wd).toFixed(1)+'" y="'+(y+10)+'" width="'+Math.abs(wd).toFixed(1)+'" height="9" fill="#1f5f3a" stroke="#000" stroke-width="0.5"><title>-10 &#8594; '+(b.dn>=0?"+":"")+b.dn.toFixed(1)+'</title></rect>';
+        s+='<rect x="'+Math.min(midx,midx+wu).toFixed(1)+'" y="'+y+'" width="'+Math.abs(wu).toFixed(1)+'" height="9" fill="#ff5b54" stroke="#04140b" stroke-width="0.5"><title>+10 &#8594; '+(b.up>=0?"+":"")+b.up.toFixed(1)+'</title></rect>';
+        s+='<rect x="'+Math.min(midx,midx+wd).toFixed(1)+'" y="'+(y+10)+'" width="'+Math.abs(wd).toFixed(1)+'" height="9" fill="#3df06f" stroke="#04140b" stroke-width="0.5"><title>-10 &#8594; '+(b.dn>=0?"+":"")+b.dn.toFixed(1)+'</title></rect>';
       } else {
-        s+='<text x="'+(midx+4)+'" y="'+(y+12)+'" fill="#aaa" font-size="9">inactive</text>';
+        s+='<text x="'+(midx+4)+'" y="'+(y+12)+'" fill="'+T_DIM+'" font-size="9">inactive</text>';
       }
-      s+='<text x="4" y="'+(y+13)+'" fill="#333">'+b.label+'</text>';
+      s+='<text x="4" y="'+(y+13)+'" fill="'+T_INK+'">'+b.label+'</text>';
     });
-    s+='<text x="'+(midx+3)+'" y="'+(h-4)+'" fill="#a8322f" font-size="8">+10 pt driver &#8594;</text>';
-    s+='<text x="'+(midx-3)+'" y="'+(h-4)+'" text-anchor="end" fill="#1f5f3a" font-size="8">&#8592; -10 pt driver</text>';
+    s+='<text x="'+(midx+3)+'" y="'+(h-4)+'" fill="#ff5b54" font-size="8">+10 pt driver &#8594;</text>';
+    s+='<text x="'+(midx-3)+'" y="'+(h-4)+'" text-anchor="end" fill="#3df06f" font-size="8">&#8592; -10 pt driver</text>';
     s+='</svg>'; $("tornado").innerHTML=s;
   }
 
@@ -2198,6 +2284,10 @@ _STUDIO_JS = r"""<script>(function(){
     download("visiblehand_query.py",py,"text/x-python");
     toast("Python snippet exported");
   });
+
+  // live UTC clock in the terminal header
+  function tick(){ var c=$("termclock"); if(c) c.textContent=new Date().toISOString().slice(11,19)+" UTC"; }
+  tick(); setInterval(tick,1000);
 
   render();
 })();</script>"""
