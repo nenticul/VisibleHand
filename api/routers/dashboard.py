@@ -2467,6 +2467,10 @@ def _build_validation(bt, scores: list, ev=None, hz=None, live=None) -> str:
     <div class="vsub">Calibration of the {live['n']} crisis events the DB reconstructs from
       data known before each crisis. {cov.get('live')}/{cov.get('n_events')} events have
       point-in-time coverage; the rest can't be scored live yet.</div>
+    {('<div class="vsub" style="margin-bottom:6px">Sub-scorer coverage across live events: '
+      + ' · '.join(f'<b>{k}</b> {v}' for k, v in cov.get('feature_coverage', {}).items())
+      + ' — economic-dominated until political/governance history backfills.</div>')
+      if cov.get('feature_coverage') else ''}
     {rel}
   </div>
   <div class="vcard">

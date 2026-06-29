@@ -329,6 +329,10 @@ class TestPanelMaterialisation:
         assert ("AR", 2018) in out["scores"]
         assert out["coverage"]["live"] == 1
         assert 0.0 <= out["scores"][("AR", 2018)] <= 100.0
+        # feature coverage: economic present, political/governance absent here
+        fc = out["coverage"]["feature_coverage"]
+        assert fc["economic"] == 1
+        assert fc["political"] == 0 and fc["governance"] == 0
 
     def test_gov_pop_asof_excludes_future(self):
         from core.calibration.panel import _gov_pop_asof

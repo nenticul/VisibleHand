@@ -125,12 +125,21 @@ def materialize_crisis_panel(db, weights: dict | None = None) -> dict:
                             "nlp": result.get("nlp_sentiment"),
                             "governance": result.get("governance")})
 
+    # How many live events actually have each sub-scorer (vs neutral-imputed /
+    # missing). This makes the "economic-dominated" reality explicit and lets the
+    # WGI/political backfills be watched as governance/political coverage climbs.
+    feature_coverage = {
+        f: sum(1 for e in live_events if e.get(f) is not None)
+        for f in ("economic", "political", "nlp", "governance")
+    }
+
     n_events = len(ALL_EVENTS)
     coverage = {
         "n_events": n_events,
         "live": len(scores),
         "insufficient": n_insufficient,
         "coverage_rate": round(len(scores) / max(n_events, 1), 3),
+        "feature_coverage": feature_coverage,
         "live_events": sorted(live_events, key=lambda x: -x["score"]),
     }
     return {"scores": scores, "coverage": coverage}
