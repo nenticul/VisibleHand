@@ -1388,7 +1388,7 @@ def _build_compare(selected: list, latest: list) -> str:
     <tbody>{trows}</tbody>
   </table>
 </div>
-{_tabbar([("Browse","/"),("Dashboard","/dashboard"),("Compare",""),("Map","/map"),("Validation","/validation"),("World","/world"),("API","/api"),("",""),("Exit","/")], active="Compare")}
+{_tabbar([("Browse","/"),("Dashboard","/dashboard"),("Compare",""),("Map","/map"),("Studio","/studio"),("Validation","/validation"),("API","/api"),("",""),("Exit","/")], active="Compare")}
 </div></div></body></html>"""
 
 
@@ -1425,8 +1425,322 @@ def _build_map(latest: list) -> str:
     {heat}
   </div>
 </div>
-{_tabbar([("Browse","/"),("Dashboard","/dashboard"),("Compare","/compare"),("Map",""),("Validation","/validation"),("World","/world"),("API","/api"),("",""),("Exit","/")], active="Map")}
+{_tabbar([("Browse","/"),("Dashboard","/dashboard"),("Compare","/compare"),("Map",""),("Studio","/studio"),("Validation","/validation"),("API","/api"),("",""),("Exit","/")], active="Map")}
 </div></div></body></html>"""
+
+
+# ── Studio: interactive data analysis & manipulation (vanilla JS, no libs) ───
+
+_STUDIO_CSS = """
+.studio-ctrls{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;
+  padding:10px 12px;background:#e7e4d6;border-bottom:2px solid #000}
+.sgrp{display:flex;flex-direction:column;gap:3px}
+.sgrp .gl{font:bold 9px Geneva,Verdana,sans-serif;letter-spacing:.06em;
+  text-transform:uppercase;color:#444}
+.wgt{display:flex;align-items:center;gap:6px}
+.wgt input[type=range]{-webkit-appearance:none;appearance:none;width:108px;height:6px;
+  background:#bdb89f;border:1px solid #000;outline:none}
+.wgt input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;
+  width:11px;height:16px;background:#1f5f3a;border:1px solid #000;cursor:ew-resize}
+.wgt input[type=range]::-moz-range-thumb{width:11px;height:16px;background:#1f5f3a;
+  border:1px solid #000;cursor:ew-resize}
+.wgt .wv{font:bold 11px "Cascadia Mono",Consolas,monospace;min-width:34px;text-align:right}
+.studio-sel,.studio-in{font:11px Geneva,Verdana,sans-serif;border:1px solid #000;
+  background:#fff;padding:2px 4px}
+.studio-in{width:120px}
+.sbtn{font:bold 10px Geneva,Verdana,sans-serif;background:#dcd8c8;border:1px solid #000;
+  box-shadow:1px 1px 0 #000;padding:3px 9px;cursor:pointer}
+.sbtn:active{box-shadow:0 0 0 #000;transform:translate(1px,1px)}
+.sbtn.go{background:#1f5f3a;color:#fff}
+.stbl{width:100%;border-collapse:collapse;font:11px Geneva,Verdana,sans-serif}
+.stbl th{background:#cfcab6;border:1px solid #000;padding:3px 6px;text-align:right;
+  cursor:pointer;white-space:nowrap;position:sticky;top:0}
+.stbl th.l,.stbl td.l{text-align:left}
+.stbl th.on::after{content:" \\25BE";font-size:8px}
+.stbl th.on.asc::after{content:" \\25B4"}
+.stbl td{border:1px solid #cabfa0;padding:2px 6px;text-align:right}
+.stbl tr:nth-child(even) td{background:#f4f1e6}
+.stbl .dn{color:#1f5f3a}.stbl .up{color:#a8322f}
+.scwrap{position:relative}
+#scTip{position:absolute;display:none;background:#000;color:#fff;font:10px monospace;
+  padding:2px 5px;pointer-events:none;white-space:nowrap;z-index:5}
+.toast{position:fixed;left:50%;bottom:38px;transform:translateX(-50%);background:#1f5f3a;
+  color:#fff;font:bold 11px Geneva,sans-serif;padding:7px 16px;border:2px solid #000;
+  box-shadow:2px 2px 0 #000;opacity:0;transition:opacity .2s;z-index:99}
+.toast.show{opacity:1}
+.tbl-scroll{max-height:300px;overflow:auto;border:1px solid #000}
+.urlbox{font:10px "Cascadia Mono",Consolas,monospace;background:#f4f1e6;border:1px solid #999;
+  padding:4px 6px;margin-top:6px;word-break:break-all;color:#333}
+"""
+
+_STUDIO_AXES = [("comp", "Composite (re-blended)"), ("c", "Composite (published)"),
+                ("e", "Economic"), ("p", "Political"), ("n", "NLP"),
+                ("g", "Governance"), ("conf", "Confidence")]
+
+
+def _build_studio(latest: list) -> str:
+    data = [{
+        "code": r.country_code,
+        "name": _COUNTRY_NAMES.get(r.country_code, r.country_code),
+        "c": round(r.composite, 1) if r.composite is not None else None,
+        "e": round(r.economic, 1) if r.economic is not None else None,
+        "p": round(r.political, 1) if r.political is not None else None,
+        "n": round(r.nlp_sentiment, 1) if r.nlp_sentiment is not None else None,
+        "g": round(r.governance, 1) if r.governance is not None else None,
+        "conf": round((r.confidence or 0), 3),
+    } for r in latest]
+    data_json = json.dumps(data)
+
+    opts = "".join(f'<option value="{k}">{lbl}</option>' for k, lbl in _STUDIO_AXES)
+    xopts = opts.replace('value="e"', 'value="e" selected')
+    yopts = opts.replace('value="p"', 'value="p" selected')
+
+    head = _head("VisibleHand — Studio")
+    shell = f"""<body>
+{_menubar(["File","Edit","View","Data"])}
+<div class="desktop">
+<div class="window">
+{_titlebar("VisibleHand — Data Studio", "/")}
+<div class="statbar">
+  <span><span class="ldot"></span>{len(data)} countries &#183; drag weights to re-blend the composite live</span>
+  <span style="color:#555">linear re-blend of published sub-scores</span>
+</div>
+<div class="studio-ctrls">
+  <div class="sgrp"><span class="gl">Economic <span id="we_v" class="wv">45</span></span>
+    <span class="wgt"><input type="range" id="we" min="0" max="100" value="45"></span></div>
+  <div class="sgrp"><span class="gl">Political <span id="wp_v" class="wv">25</span></span>
+    <span class="wgt"><input type="range" id="wp" min="0" max="100" value="25"></span></div>
+  <div class="sgrp"><span class="gl">NLP <span id="wn_v" class="wv">20</span></span>
+    <span class="wgt"><input type="range" id="wn" min="0" max="100" value="20"></span></div>
+  <div class="sgrp"><span class="gl">Governance <span id="wg_v" class="wv">10</span></span>
+    <span class="wgt"><input type="range" id="wg" min="0" max="100" value="10"></span></div>
+  <div class="sgrp"><span class="gl">Preset</span>
+    <span style="display:flex;gap:4px">
+      <button class="sbtn" data-preset="45,25,20,10">Default</button>
+      <button class="sbtn" data-preset="25,25,25,25">Equal</button>
+      <button class="sbtn" data-preset="70,10,10,10">Macro</button>
+      <button class="sbtn" data-preset="10,55,15,20">Political</button>
+    </span></div>
+  <div class="sgrp"><span class="gl">X axis</span>
+    <select class="studio-sel" id="xax">{xopts}</select></div>
+  <div class="sgrp"><span class="gl">Y axis</span>
+    <select class="studio-sel" id="yax">{yopts}</select></div>
+  <div class="sgrp"><span class="gl">Filter</span>
+    <input class="studio-in" id="flt" placeholder="code or name"></div>
+  <div class="sgrp"><span class="gl">Band</span>
+    <select class="studio-sel" id="bnd">
+      <option value="">All</option><option value="0">Low &lt;20</option>
+      <option value="1">Watch 20–40</option><option value="2">Elevated 40–60</option>
+      <option value="3">High 60–75</option><option value="4">Severe 75+</option></select></div>
+  <div class="sgrp"><span class="gl">Export</span>
+    <span style="display:flex;gap:4px">
+      <button class="sbtn go" id="csv">CSV</button>
+      <button class="sbtn" id="apiurl">API weights</button></span></div>
+</div>
+<div class="vrow">
+  <div class="vcard" style="flex:1.25">
+    <div class="vh2">Scatter — <span id="xlbl">Economic</span> &#215; <span id="ylbl">Political</span></div>
+    <div class="vsub">Bubble size &amp; colour = re-blended composite. Move the weight sliders and
+      watch every country re-rank. Hover a point for the country.</div>
+    <div class="scwrap"><div id="scatter"></div><div id="scTip"></div></div>
+  </div>
+  <div class="vcard">
+    <div class="vh2">Distribution — re-blended composite</div>
+    <div class="vsub">10 bins, 0–100. Updates live with the weights.</div>
+    <div id="hist"></div>
+    <div class="urlbox" id="urlout">/risk/&lt;code&gt;?economic_weight=0.45&amp;political_weight=0.25&amp;nlp_weight=0.20&amp;governance_weight=0.10</div>
+  </div>
+</div>
+<div class="vcard" style="border-right:none">
+  <div class="vh2">Ranked table <span style="font-weight:normal;color:#888;font-size:10px">— click a header to sort</span></div>
+  <div class="tbl-scroll"><table class="stbl" id="tbl">
+    <thead><tr>
+      <th class="l" data-k="code">Country</th>
+      <th data-k="comp">Composite</th>
+      <th data-k="delta">&#916; vs pub.</th>
+      <th data-k="e">Econ</th><th data-k="p">Pol</th>
+      <th data-k="n">NLP</th><th data-k="g">Gov</th>
+      <th data-k="conf">Conf</th>
+    </tr></thead><tbody id="tbody"></tbody>
+  </table></div>
+</div>
+{_tabbar([("Browse","/"),("Dashboard","/dashboard"),("Compare","/compare"),("Map","/map"),("Studio",""),("Validation","/validation"),("API","/api"),("",""),("Exit","/")], active="Studio")}
+</div></div>
+<div class="toast" id="toast"></div>
+"""
+    data_script = f'<script>window.VH_DATA={data_json};</script>'
+    return head + "<style>" + _STUDIO_CSS + "</style>" + shell + data_script + _STUDIO_JS + "</body></html>"
+
+
+_STUDIO_JS = r"""<script>(function(){
+  var DATA = window.VH_DATA || [];
+  var W = {e:45,p:25,n:20,g:10};
+  var PAL = ["#5d7c4f","#8f9a45","#cf9f24","#c2702a","#a8322f"];
+  var AXL = {comp:"Composite",c:"Composite (pub)",e:"Economic",p:"Political",n:"NLP",g:"Governance",conf:"Confidence"};
+  var sortKey="comp", sortAsc=false;
+  var $ = function(id){return document.getElementById(id);};
+
+  function band(v){ if(v==null)return 0; if(v<20)return 0; if(v<40)return 1; if(v<60)return 2; if(v<75)return 3; return 4; }
+  function color(v){ return v==null?"#9a9a9a":PAL[band(v)]; }
+  function fmt(v){ return (v==null)?"—":(+v).toFixed(1); }
+
+  function reblend(d){
+    var num=0, den=0, m={e:d.e,p:d.p,n:d.n,g:d.g};
+    for(var k in m){ if(m[k]!=null){ num += W[k]*m[k]; den += W[k]; } }
+    return den>0 ? num/den : d.c;
+  }
+  function axval(d,key){
+    if(key==="comp") return d.comp;
+    if(key==="conf") return d.conf==null?null:d.conf*100;
+    return d[key];
+  }
+  function norm(){ var t=W.e+W.p+W.n+W.g||1; return {e:W.e/t,p:W.p/t,n:W.n/t,g:W.g/t}; }
+
+  function compute(){ return DATA.map(function(d){ var o={}; for(var k in d)o[k]=d[k]; o.comp=reblend(d); o.delta=(o.comp!=null&&d.c!=null)?(o.comp-d.c):null; return o; }); }
+
+  // ---- Scatter (inline SVG) ----
+  function drawScatter(rows){
+    var w=560,h=420,pad=44, xk=$("xax").value, yk=$("yax").value;
+    $("xlbl").textContent=AXL[xk]; $("ylbl").textContent=AXL[yk];
+    var X=function(v){return pad+(w-2*pad)*(v/100);};
+    var Y=function(v){return (h-pad)-(h-2*pad)*(v/100);};
+    var s='<svg viewBox="0 0 '+w+' '+h+'" width="100%" xmlns="http://www.w3.org/2000/svg" style="font:10px Geneva,sans-serif">';
+    s+='<rect x="'+pad+'" y="'+pad+'" width="'+(w-2*pad)+'" height="'+(h-2*pad)+'" fill="#fbfaf4" stroke="#000"/>';
+    for(var t=0;t<=100;t+=20){
+      s+='<line x1="'+X(t)+'" y1="'+pad+'" x2="'+X(t)+'" y2="'+(h-pad)+'" stroke="#e3decd"/>';
+      s+='<line x1="'+pad+'" y1="'+Y(t)+'" x2="'+(w-pad)+'" y2="'+Y(t)+'" stroke="#e3decd"/>';
+      s+='<text x="'+X(t)+'" y="'+(h-pad+14)+'" text-anchor="middle" fill="#777">'+t+'</text>';
+      s+='<text x="'+(pad-8)+'" y="'+(Y(t)+3)+'" text-anchor="end" fill="#777">'+t+'</text>';
+    }
+    s+='<text x="'+(w/2)+'" y="'+(h-8)+'" text-anchor="middle" fill="#333" font-weight="bold">'+AXL[xk]+'</text>';
+    s+='<text x="14" y="'+(h/2)+'" text-anchor="middle" fill="#333" font-weight="bold" transform="rotate(-90 14 '+(h/2)+')">'+AXL[yk]+'</text>';
+    rows.forEach(function(d){
+      var xv=axval(d,xk), yv=axval(d,yk); if(xv==null||yv==null)return;
+      var r=5+(d.comp||0)/100*7;
+      s+='<circle cx="'+X(xv).toFixed(1)+'" cy="'+Y(yv).toFixed(1)+'" r="'+r.toFixed(1)+'" fill="'+color(d.comp)+'" fill-opacity="0.78" stroke="#000" stroke-width="0.6" data-c="'+d.code+'" data-x="'+xv.toFixed(1)+'" data-y="'+yv.toFixed(1)+'" data-comp="'+fmt(d.comp)+'"/>';
+      s+='<text x="'+X(xv).toFixed(1)+'" y="'+(Y(yv)-r-2).toFixed(1)+'" text-anchor="middle" fill="#222" font-size="8">'+d.code+'</text>';
+    });
+    s+='</svg>';
+    $("scatter").innerHTML=s;
+    var tip=$("scTip"), box=$("scatter");
+    Array.prototype.forEach.call(box.querySelectorAll("circle"),function(c){
+      c.addEventListener("mousemove",function(e){
+        var rb=box.getBoundingClientRect();
+        tip.style.display="block";
+        tip.style.left=(e.clientX-rb.left+10)+"px"; tip.style.top=(e.clientY-rb.top+8)+"px";
+        tip.textContent=c.getAttribute("data-c")+"  "+AXL[$("xax").value]+":"+c.getAttribute("data-x")+"  "+AXL[$("yax").value]+":"+c.getAttribute("data-y")+"  comp:"+c.getAttribute("data-comp");
+      });
+      c.addEventListener("mouseleave",function(){tip.style.display="none";});
+    });
+  }
+
+  // ---- Histogram ----
+  function drawHist(rows){
+    var w=400,h=300,pad=34, bins=new Array(10).fill(0);
+    rows.forEach(function(d){ if(d.comp!=null){ var b=Math.min(9,Math.floor(d.comp/10)); bins[b]++; } });
+    var mx=Math.max.apply(null,bins)||1, bw=(w-2*pad)/10;
+    var s='<svg viewBox="0 0 '+w+' '+h+'" width="100%" xmlns="http://www.w3.org/2000/svg" style="font:9px Geneva,sans-serif">';
+    s+='<line x1="'+pad+'" y1="'+(h-pad)+'" x2="'+(w-pad)+'" y2="'+(h-pad)+'" stroke="#000"/>';
+    bins.forEach(function(cnt,i){
+      var bh=(h-2*pad)*(cnt/mx), x=pad+i*bw, y=(h-pad)-bh;
+      s+='<rect x="'+(x+1).toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+(bw-2).toFixed(1)+'" height="'+bh.toFixed(1)+'" fill="'+PAL[Math.min(4,Math.floor(i/2))]+'" stroke="#000" stroke-width="0.5"/>';
+      if(cnt)s+='<text x="'+(x+bw/2).toFixed(1)+'" y="'+(y-3).toFixed(1)+'" text-anchor="middle" fill="#333">'+cnt+'</text>';
+      s+='<text x="'+(x+bw/2).toFixed(1)+'" y="'+(h-pad+12)+'" text-anchor="middle" fill="#888">'+(i*10)+'</text>';
+    });
+    s+='</svg>'; $("hist").innerHTML=s;
+  }
+
+  // ---- Table ----
+  function passFilter(d){
+    var q=$("flt").value.trim().toLowerCase();
+    if(q && d.code.toLowerCase().indexOf(q)<0 && d.name.toLowerCase().indexOf(q)<0) return false;
+    var bsel=$("bnd").value;
+    if(bsel!=="" && String(band(d.comp))!==bsel) return false;
+    return true;
+  }
+  function drawTable(rows){
+    var view=rows.filter(passFilter);
+    view.sort(function(a,b){
+      var av=(sortKey==="code")?a.code:(a[sortKey]==null?-1:a[sortKey]);
+      var bv=(sortKey==="code")?b.code:(b[sortKey]==null?-1:b[sortKey]);
+      if(av<bv)return sortAsc?-1:1; if(av>bv)return sortAsc?1:-1; return 0;
+    });
+    var html="";
+    view.forEach(function(d){
+      var dc=d.delta==null?"":(d.delta>=0?"up":"dn");
+      var ds=d.delta==null?"—":((d.delta>=0?"+":"")+d.delta.toFixed(1));
+      html+='<tr><td class="l"><b>'+d.code+'</b> <span style="color:#888">'+d.name+'</span></td>'
+        +'<td style="color:'+color(d.comp)+';font-weight:bold">'+fmt(d.comp)+'</td>'
+        +'<td class="'+dc+'">'+ds+'</td>'
+        +'<td>'+fmt(d.e)+'</td><td>'+fmt(d.p)+'</td><td>'+fmt(d.n)+'</td><td>'+fmt(d.g)+'</td>'
+        +'<td>'+(d.conf==null?"—":(d.conf*100).toFixed(0)+"%")+'</td></tr>';
+    });
+    $("tbody").innerHTML=html;
+    Array.prototype.forEach.call(document.querySelectorAll("#tbl th"),function(th){
+      th.className=th.className.replace(/\s*on\s*/," ").replace(/\s*asc\s*/," ");
+      if(th.getAttribute("data-k")===sortKey){ th.className+=" on"+(sortAsc?" asc":""); }
+    });
+  }
+
+  function apiURL(){
+    var n=norm();
+    return "/risk/<code>?economic_weight="+n.e.toFixed(2)+"&political_weight="+n.p.toFixed(2)
+      +"&nlp_weight="+n.n.toFixed(2)+"&governance_weight="+n.g.toFixed(2);
+  }
+
+  function render(){
+    var rows=compute();
+    drawScatter(rows); drawHist(rows); drawTable(rows);
+    $("urlout").textContent=apiURL();
+  }
+
+  function toast(msg){ var t=$("toast"); t.textContent=msg; t.className="toast show"; setTimeout(function(){t.className="toast";},1600); }
+
+  function bindSlider(id,key){
+    var el=$(id); el.addEventListener("input",function(){ W[key]=+el.value; $(id+"_v").textContent=el.value; render(); });
+  }
+  bindSlider("we","e"); bindSlider("wp","p"); bindSlider("wn","n"); bindSlider("wg","g");
+
+  Array.prototype.forEach.call(document.querySelectorAll("[data-preset]"),function(b){
+    b.addEventListener("click",function(){
+      var p=b.getAttribute("data-preset").split(",").map(Number);
+      W.e=p[0];W.p=p[1];W.n=p[2];W.g=p[3];
+      $("we").value=p[0];$("wp").value=p[1];$("wn").value=p[2];$("wg").value=p[3];
+      $("we_v").textContent=p[0];$("wp_v").textContent=p[1];$("wn_v").textContent=p[2];$("wg_v").textContent=p[3];
+      render();
+    });
+  });
+  $("xax").addEventListener("change",render);
+  $("yax").addEventListener("change",render);
+  $("flt").addEventListener("input",render);
+  $("bnd").addEventListener("change",render);
+  Array.prototype.forEach.call(document.querySelectorAll("#tbl th"),function(th){
+    th.addEventListener("click",function(){
+      var k=th.getAttribute("data-k");
+      if(sortKey===k){ sortAsc=!sortAsc; } else { sortKey=k; sortAsc=(k==="code"); }
+      drawTable(compute());
+    });
+  });
+  $("csv").addEventListener("click",function(){
+    var rows=compute().filter(passFilter);
+    var lines=["code,name,composite_reblended,composite_published,delta,economic,political,nlp,governance,confidence"];
+    rows.forEach(function(d){
+      lines.push([d.code,'"'+d.name+'"',fmt(d.comp),fmt(d.c),(d.delta==null?"":d.delta.toFixed(1)),
+        fmt(d.e),fmt(d.p),fmt(d.n),fmt(d.g),(d.conf==null?"":d.conf)].join(","));
+    });
+    var blob=new Blob([lines.join("\n")],{type:"text/csv"});
+    var a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+    a.download="visiblehand_studio.csv"; document.body.appendChild(a); a.click(); a.remove();
+    toast("Exported "+rows.length+" rows");
+  });
+  $("apiurl").addEventListener("click",function(){
+    var url=apiURL();
+    if(navigator.clipboard){ navigator.clipboard.writeText(url).then(function(){toast("API weights copied");},function(){toast(url);}); }
+    else { toast(url); }
+  });
+
+  render();
+})();</script>"""
 
 
 # ── Calibration / validation visuals (inline SVG, no JS libs) ────────────────
@@ -1541,7 +1855,7 @@ def _build_validation(bt, scores: list) -> str:
   result — the full historical study (Reinhart–Rogoff defaults, IMF restructurings,
   UCDP conflicts) is the path to a citable figure. Methodology: <a href="/methodology">/methodology</a>.
 </div>
-{_tabbar([("Browse","/"),("Dashboard","/dashboard"),("Compare","/compare"),("Map","/map"),("Validation",""),("API","/api"),("",""),("Exit","/")], active="Validation")}
+{_tabbar([("Browse","/"),("Dashboard","/dashboard"),("Compare","/compare"),("Map","/map"),("Studio","/studio"),("Validation",""),("API","/api"),("",""),("Exit","/")], active="Validation")}
 </div></div></body></html>"""
 
 
@@ -1725,6 +2039,19 @@ async def map_page(db: Session = Depends(get_db)) -> HTMLResponse:
             '<div class="empty">No scores yet — seed the database first.</div>'
             '</div></div></body></html>', status_code=404)
     return HTMLResponse(_build_map(latest))
+
+
+@router.get("/studio", response_class=HTMLResponse, include_in_schema=False)
+async def studio_page(db: Session = Depends(get_db)) -> HTMLResponse:
+    latest = _latest_scores(db)
+    if not latest:
+        return HTMLResponse(
+            _head("Studio — n/a") +
+            '<body><div class="desktop"><div class="window">' +
+            _titlebar("VisibleHand — Data Studio", "/") +
+            '<div class="empty">No scores yet — seed the database first.</div>'
+            '</div></div></body></html>', status_code=404)
+    return HTMLResponse(_build_studio(latest))
 
 
 @router.get("/validation", response_class=HTMLResponse, include_in_schema=False)
@@ -2449,6 +2776,7 @@ async def landing() -> HTMLResponse:
     </p>
     <div>
       <a class="mac-btn def" href="/dashboard">Live Dashboard</a>
+      <a class="mac-btn" href="/studio">Data Studio</a>
       <a class="mac-btn" href="/compare">Compare</a>
       <a class="mac-btn" href="/map">Risk Map</a>
       <a class="mac-btn" href="/validation">Validation</a>
