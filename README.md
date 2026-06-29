@@ -1,4 +1,5 @@
 # VisibleHand
+<img width="787" height="212" alt="ascii-art-text" src="https://github.com/user-attachments/assets/c1772587-be6b-4f24-b68e-ffaf4806926a" />
 
 **Open, programmable, point-in-time political-economic risk scoring for every country.**
 
