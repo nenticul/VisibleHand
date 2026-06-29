@@ -247,7 +247,7 @@ Full scoring methodology documented in [METHODOLOGY.md](METHODOLOGY.md).
 
 Pull requests welcome. Key areas for contribution:
 
-- Additional country coverage (currently ~20 countries)
+- Additional country coverage (currently ~44 countries)
 - ACLED integration for more precise political event data
 - Multi-language central-bank statement support (ECB, Banque de France, Banxico)
 - Calibration study against historical sovereign stress events (see METHODOLOGY Â§6)
