@@ -2290,7 +2290,7 @@ def _ci_bar(point: float, lo, hi, label: str, ref: float = 0.5) -> str:
             f'<span class="mono" style="width:42px;text-align:right">{point:.3f}</span></div>')
 
 
-def _build_validation(bt, scores: list, ev=None, hz=None) -> str:
+def _build_validation(bt, scores: list, ev=None, hz=None, live=None) -> str:
     roc = _svg_roc(bt.roc_curve, bt.auc)
     dist = _svg_histogram([s.composite for s in scores])
     kpis = [("ROC-AUC", f"{bt.auc:.2f}"), ("Brier", f"{bt.brier_score:.3f}"),
@@ -2310,6 +2310,50 @@ def _build_validation(bt, scores: list, ev=None, hz=None) -> str:
                    f'<span style="flex:1;height:10px;border:1px solid #000;background:#fff;position:relative">'
                    f'<span style="position:absolute;left:0;top:0;bottom:0;width:{w}%;background:{_risk_color(auc*100)}"></span></span>'
                    f'<span class="mono" style="width:36px;text-align:right">{auc:.2f}</span></div>')
+
+    live_section = ""
+    if live is not None:
+        la, lap = live["auc"], live["average_precision"]
+        lbd = live["brier_decomposition"]
+        cov = live.get("coverage", {})
+        rel = _svg_reliability(live.get("reliability_curve", []))
+        kcards = "".join(
+            f'<div style="flex:1;min-width:92px;border:1px solid #000;padding:8px 10px;background:#fff">'
+            f'<div style="font-size:17px;font-weight:bold;font-family:monospace">{v}</div>'
+            f'<div style="font-size:8px;letter-spacing:.06em;color:#666;text-transform:uppercase">{k}</div></div>'
+            for k, v in [
+                ("AUC", f'{la["point"]:.3f}'),
+                ("AUC 95% CI", f'{la.get("ci_low")}–{la.get("ci_high")}'),
+                ("Avg precision", f'{lap["point"]:.3f}'),
+                ("Brier", f'{lbd["brier"]}'),
+                ("Skill", f'{lbd["skill_score"]}'),
+                ("Events", f'{live["n"]} ({live["n_crises"]} crises)'),
+            ])
+        bytype = ""
+        for ct, d in sorted(live.get("by_crisis_type", {}).items(), key=lambda kv: -kv[1]["auc"]):
+            w = int(max(0, min(1, d["auc"])) * 100)
+            bytype += (f'<div style="display:flex;align-items:center;gap:8px;margin:3px 0;font-size:11px">'
+                       f'<span style="width:120px" class="mono">{ct.replace("_"," ")}</span>'
+                       f'<span style="flex:1;height:10px;border:1px solid #000;background:#fff;position:relative">'
+                       f'<span style="position:absolute;left:0;top:0;bottom:0;width:{w}%;background:{_risk_color(d["auc"]*100)}"></span></span>'
+                       f'<span class="mono" style="width:54px;text-align:right">{d["auc"]:.2f} ·n{d["n"]}</span></div>')
+        live_section = f"""
+<div class="lab-hd">★ Live result — point-in-time reconstruction (no heuristic fill)</div>
+<div style="display:flex;gap:8px;flex-wrap:wrap;padding:10px 12px;border-bottom:1px solid #000">{kcards}</div>
+<div class="vrow">
+  <div class="vcard">
+    <div class="vh2">Reliability — live point-in-time scores</div>
+    <div class="vsub">Calibration of the {live['n']} crisis events the DB reconstructs from
+      data known before each crisis. {cov.get('live')}/{cov.get('n_events')} events have
+      point-in-time coverage; the rest can't be scored live yet.</div>
+    {rel}
+  </div>
+  <div class="vcard">
+    <div class="vh2">Live AUC by crisis type</div>
+    {bytype or '<div class="vsub">Not enough per-type live events.</div>'}
+    <div class="vsub" style="margin-top:8px">{live['note']}</div>
+  </div>
+</div>"""
 
     eval_section = ""
     if ev is not None:
@@ -2420,6 +2464,7 @@ def _build_validation(bt, scores: list, ev=None, hz=None) -> str:
   <span style="color:#555">2000–2023 backtest</span>
 </div>
 <div style="display:flex;gap:8px;flex-wrap:wrap;padding:10px 12px;border-bottom:1px solid #000">{kpi_html}</div>
+{live_section}
 {eval_section}
 {hz_section}
 <div class="vrow">
@@ -2438,10 +2483,9 @@ def _build_validation(bt, scores: list, ev=None, hz=None) -> str:
   </div>
 </div>
 <div style="padding:10px 12px;border-top:1px solid #000;font-size:11px;color:#555;line-height:1.6">
-  <b>Honest note.</b> {bt.note} A heuristic stands in where live per-year DB scores
-  are unavailable, so AUC here is illustrative of the framework, not a published
-  result — the full historical study (Reinhart–Rogoff defaults, IMF restructurings,
-  UCDP conflicts) is the path to a citable figure. Methodology: <a href="/methodology">/methodology</a>.
+  <b>Honest note.</b> {"The ★ live section is the real result: composites reconstructed from data known before each crisis (no look-ahead), over the events the DB actually covers. Small n means wide CIs — read the interval. The lower ROC/by-type panels use a heuristic bridge across all events and remain illustrative of the framework." if live is not None else (bt.note + " A heuristic stands in where live per-year DB scores are unavailable, so AUC here is illustrative of the framework, not a published result.")}
+  The full historical study (Reinhart–Rogoff defaults, IMF restructurings,
+  UCDP conflicts) is the path to a fully-powered citable figure. Methodology: <a href="/methodology">/methodology</a>.
 </div>
 {_tabbar([("Browse","/"),("Dashboard","/dashboard"),("Compare","/compare"),("Map","/map"),("Studio","/studio"),("Validation",""),("API","/api"),("",""),("Exit","/")], active="Validation")}
 </div></div></body></html>"""
@@ -2644,19 +2688,26 @@ async def studio_page(db: Session = Depends(get_db)) -> HTMLResponse:
 
 @router.get("/validation", response_class=HTMLResponse, include_in_schema=False)
 async def validation_page(db: Session = Depends(get_db)) -> HTMLResponse:
-    from api.routers.calibration import _cached_backtest, _cached_evaluation
+    from api.routers.calibration import _cached_backtest, _cached_evaluation, cached_panel
     bt = _cached_backtest()
     try:
         ev = _cached_evaluation(2000)
     except Exception:
         ev = None
+    hz = None
+    live = None
     try:
         from core.calibration.hazard_model import train_from_panel
-        hz = train_from_panel(db)
+        from core.calibration.evaluation import live_only_evaluation
+        panel = cached_panel(db)
+        hz = train_from_panel(panel=panel)
+        live = live_only_evaluation(panel["coverage"]["live_events"], n_boot=1500)
+        if live is not None:
+            live["coverage"] = panel["coverage"]
     except Exception:
-        hz = None
+        log.exception("validation live panel failed")
     scores = _latest_scores(db)
-    return HTMLResponse(_build_validation(bt, scores, ev=ev, hz=hz))
+    return HTMLResponse(_build_validation(bt, scores, ev=ev, hz=hz, live=live))
 
 
 # â”€â”€ ASCII terminal: rotating 3D globe + ASCII charts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

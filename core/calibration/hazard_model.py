@@ -99,17 +99,21 @@ def _matrix_from_events(events: list[dict]):
     return np.array(X, dtype=float), np.array(y, dtype=int)
 
 
-def train_from_panel(db, l2: float = 1.0, monotone: bool = True,
-                     n_boot: int = 1000) -> dict:
+def train_from_panel(db=None, l2: float = 1.0, monotone: bool = True,
+                     n_boot: int = 1000, panel: dict | None = None) -> dict:
     """
     Train the discrete-time hazard model on the C7 point-in-time panel.
+
+    Pass a pre-materialised `panel` to reuse a cached one (avoids re-querying);
+    otherwise it materialises from `db`.
 
     Returns a JSON-friendly dict with the fitted (glass-box) coefficients, the
     in-sample discrimination/calibration, training coverage, and an honest note
     about sample size. Status is 'insufficient' when the panel cannot supply
     enough labelled, two-class observations to fit responsibly.
     """
-    panel = materialize_crisis_panel(db)
+    if panel is None:
+        panel = materialize_crisis_panel(db)
     events = panel["coverage"]["live_events"]
     X, y = _matrix_from_events(events)
 

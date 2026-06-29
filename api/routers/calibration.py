@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from functools import lru_cache
 
 from fastapi import APIRouter, Query, Depends
@@ -14,6 +15,21 @@ from core.scoring.composite import DEFAULT_WEIGHTS
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/calibration", tags=["calibration"])
+
+# The C7 panel materialisation hits the DB ~hundreds of times; cache it (the
+# underlying indicator history only changes when ingestion runs, ~daily).
+_PANEL_TTL = 1800.0
+_panel_cache: dict = {"data": None, "ts": 0.0}
+
+
+def cached_panel(db) -> dict:
+    now = time.time()
+    if _panel_cache["data"] is not None and now - _panel_cache["ts"] < _PANEL_TTL:
+        return _panel_cache["data"]
+    from core.calibration.panel import materialize_crisis_panel
+    data = materialize_crisis_panel(db)
+    _panel_cache.update(data=data, ts=now)
+    return data
 
 
 @lru_cache(maxsize=1)
@@ -130,12 +146,12 @@ async def calibration_evaluation(
     """
     try:
         if source == "live":
-            from core.calibration.panel import materialize_crisis_panel
-            from core.calibration.evaluation import run_evaluation
-            panel = materialize_crisis_panel(db)
+            from core.calibration.evaluation import run_evaluation, live_only_evaluation
+            panel = cached_panel(db)
             rep = run_evaluation(db_scores=panel["scores"], n_boot=n_boot)
             out = rep.__dict__
             out["panel_coverage"] = panel["coverage"]
+            out["live_only"] = live_only_evaluation(panel["coverage"]["live_events"], n_boot=n_boot)
             return out
         rep = _cached_evaluation(n_boot)
         return rep.__dict__
@@ -159,7 +175,7 @@ async def calibration_hazard_model(
     """
     try:
         from core.calibration.hazard_model import train_from_panel
-        return train_from_panel(db, l2=l2, monotone=monotone)
+        return train_from_panel(panel=cached_panel(db), l2=l2, monotone=monotone)
     except Exception as exc:
         log.exception("calibration/hazard-model failed")
         return {"status": "error", "message": str(exc)}
@@ -173,8 +189,7 @@ async def calibration_panel(db: Session = Depends(get_db)) -> dict:
     reconstructed scores. The honest denominator behind a `source=live` AUC.
     """
     try:
-        from core.calibration.panel import materialize_crisis_panel
-        panel = materialize_crisis_panel(db)
+        panel = cached_panel(db)
         return {"status": "available", "coverage": panel["coverage"]}
     except Exception as exc:
         log.exception("calibration/panel failed")

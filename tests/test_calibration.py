@@ -246,6 +246,28 @@ class TestRunEvaluation:
         assert "live_db" in rep.score_source
         assert rep.auc["point"] > 0.9
 
+    def test_live_only_evaluation(self):
+        from core.calibration.evaluation import live_only_evaluation
+        # well-separated live events -> high AUC, both classes, by-type present
+        events = []
+        for i in range(30):
+            crisis = i % 2 == 0
+            events.append({"label": 1 if crisis else 0,
+                           "score": 80.0 if crisis else 25.0,
+                           "crisis_type": "currency" if crisis else "none"})
+        out = live_only_evaluation(events, n_boot=200)
+        assert out is not None
+        assert out["n"] == 30 and out["n_crises"] == 15
+        assert out["auc"]["point"] > 0.95
+        assert out["auc"]["ci_low"] is not None
+
+    def test_live_only_evaluation_insufficient(self):
+        from core.calibration.evaluation import live_only_evaluation
+        # too few / single-class -> None
+        assert live_only_evaluation([], n_boot=50) is None
+        assert live_only_evaluation(
+            [{"label": 1, "score": 70.0, "crisis_type": "x"}] * 20, n_boot=50) is None
+
 
 from types import SimpleNamespace
 

@@ -425,3 +425,40 @@ def run_evaluation(
 def _heuristic_score_single(e: CrisisEvent) -> float:
     from core.calibration.backtest import _heuristic_score
     return _heuristic_score(e)
+
+
+def live_only_evaluation(live_events: list[dict], n_boot: int = 2000, seed: int = 0) -> dict | None:
+    """
+    Metrics over **only** the crisis events the C7 panel reconstructed from real
+    point-in-time data — the clean, citable result (no heuristic fill). Each
+    live_event carries its reconstructed composite `score` and crisis `label`.
+
+    Returns None when there aren't enough two-class live events to be meaningful.
+    """
+    rows = [e for e in (live_events or []) if e.get("label") is not None and e.get("score") is not None]
+    labels = [int(e["label"]) for e in rows]
+    scores = [float(e["score"]) for e in rows]
+    if len(labels) < 12 or len(set(labels)) < 2:
+        return None
+    probs = [s / 100.0 for s in scores]
+    by_type: dict[str, dict] = {}
+    for ct in sorted({e.get("crisis_type", "?") for e in rows if int(e["label"]) == 1}):
+        idx = [i for i, e in enumerate(rows) if e.get("crisis_type") == ct or int(e["label"]) == 0]
+        sub_l = [labels[i] for i in idx]
+        if len(set(sub_l)) < 2:
+            continue
+        by_type[ct] = {"auc": round(auc_score([scores[i] for i in idx], sub_l), 3),
+                       "n": sum(1 for i in idx if rows[i].get("crisis_type") == ct)}
+    return {
+        "n": len(labels),
+        "n_crises": sum(labels),
+        "base_rate": round(sum(labels) / len(labels), 4),
+        "auc": bootstrap_ci(scores, labels, auc_score, n_boot=n_boot, seed=seed),
+        "average_precision": bootstrap_ci(scores, labels, average_precision, n_boot=n_boot, seed=seed),
+        "brier_decomposition": brier_decomposition(probs, labels),
+        "reliability_curve": reliability_curve(probs, labels),
+        "by_crisis_type": by_type,
+        "note": ("Computed on the point-in-time-reconstructed events only — no "
+                 "heuristic fill. This is the honest live result; small n means "
+                 "wide CIs, so read the interval, not just the point."),
+    }
