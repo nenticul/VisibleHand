@@ -48,11 +48,18 @@ _ISO3_TO_ISO2: dict[str, str] = {
 _ISO3_LIST = ";".join(_ISO3_TO_ISO2.keys())
 
 
-async def fetch_wgi(series_id: str, years: int = 5) -> list[dict]:
-    """Return [{iso2, year, value}] for one WGI series across all 44 countries."""
+async def fetch_wgi(series_id: str, years: int = 30) -> list[dict]:
+    """
+    Return [{iso2, year, value}] for one WGI series across all 44 countries.
+
+    Default depth is ~30 years (WGI runs back to 1996) so the C7 point-in-time
+    panel has governance history for *historical* crisis years (2008, 2010, 2015,
+    …), not just the last few. per_page is sized for 44 countries × ~26 annual
+    points. This is depth-only — it does not change scorer weights.
+    """
     url = (
         f"{WB_BASE}/country/{_ISO3_LIST}/indicator/{series_id}"
-        f"?source=3&format=json&mrv={years}&per_page=600"
+        f"?source=3&format=json&mrv={years}&per_page=2000"
     )
     payload = await get_json(url)
     if not payload or len(payload) < 2 or not payload[1]:

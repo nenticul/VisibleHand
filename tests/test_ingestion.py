@@ -26,6 +26,35 @@ async def test_worldbank_fetch_parses_payload():
 
 
 @pytest.mark.asyncio
+async def test_wgi_fetches_deep_history():
+    # Multi-year payload spanning historical crisis years -> all parsed.
+    captured = {}
+
+    async def fake_get_json(url):
+        captured["url"] = url
+        return [
+            {"page": 1},
+            [
+                {"countryiso3code": "BRA", "date": "2014", "value": -0.14},
+                {"countryiso3code": "ARG", "date": "2008", "value": -0.36},
+                {"countryiso3code": "GRC", "date": "2009", "value": 0.62},
+                {"countryiso3code": "USA", "date": "2007", "value": 1.56},
+                {"countryiso3code": "BRA", "date": "2021", "value": None},  # nulls skipped
+            ],
+        ]
+
+    with patch("core.ingestion.wgi.get_json", new=fake_get_json):
+        from core.ingestion.wgi import fetch_wgi
+        rows = await fetch_wgi("GOV_WGI_RL.EST")
+
+    years = {r["year"] for r in rows}
+    assert {2014, 2008, 2009, 2007}.issubset(years)  # historical years parsed
+    assert all(r["value"] is not None for r in rows)
+    # the request asks for deep history, not just the last few years
+    assert "mrv=30" in captured["url"]
+
+
+@pytest.mark.asyncio
 async def test_worldbank_handles_empty():
     with patch("core.ingestion.worldbank.get_json", new=AsyncMock(return_value=None)):
         from core.ingestion.worldbank import fetch_world_bank
