@@ -20,6 +20,13 @@ def _cached_backtest():
     return run_backtest()
 
 
+@lru_cache(maxsize=4)
+def _cached_evaluation(n_boot: int):
+    """Run the full evaluation harness once per n_boot (bootstrap is expensive)."""
+    from core.calibration.evaluation import run_evaluation
+    return run_evaluation(n_boot=n_boot)
+
+
 @router.get("/summary", response_model=CalibrationSummary)
 async def calibration_summary() -> CalibrationSummary:
     """
@@ -95,6 +102,42 @@ async def calibration_roc(
             "status": "error",
             "message": str(exc),
         }
+
+
+@router.get("/evaluation")
+async def calibration_evaluation(
+    n_boot: int = Query(2000, ge=200, le=5000,
+                        description="Bootstrap replicates for the AUC/AP confidence intervals."),
+) -> dict:
+    """
+    Rigorous evaluation harness (Tier-0): the headline AUC/AP **with bootstrap
+    confidence intervals**, no-skill **baselines**, a look-ahead-free **temporal
+    (walk-forward) calibration CV**, and the **Murphy/Brier decomposition** into
+    reliability / resolution / uncertainty.
+
+    Note: `score_source` says whether live DB composite scores were used. Until
+    the historical point-in-time panel is wired (calibration preprint, C7), this
+    runs on the documented heuristic bridge — the numbers are illustrative but
+    the methodology, CIs, and baselines are exactly what the published study uses.
+    """
+    try:
+        rep = _cached_evaluation(n_boot)
+        return rep.__dict__
+    except Exception as exc:
+        log.exception("calibration/evaluation failed")
+        return {"status": "error", "message": str(exc)}
+
+
+@router.get("/baselines")
+async def calibration_baselines() -> dict:
+    """No-skill floors (random, base-rate, crisis-type prior) the headline AUC must beat."""
+    try:
+        from core.calibration.evaluation import baseline_results
+        from core.calibration.crisis_dataset import ALL_EVENTS
+        return {"status": "available", "baselines": baseline_results(ALL_EVENTS)}
+    except Exception as exc:
+        log.exception("calibration/baselines failed")
+        return {"status": "error", "message": str(exc)}
 
 
 @router.get("/dataset")

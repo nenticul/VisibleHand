@@ -16,6 +16,17 @@ from core.calibration.backtest import (
     _brier_score,
     _auc_from_sorted,
 )
+from core.calibration.evaluation import (
+    auc_score,
+    average_precision,
+    bootstrap_ci,
+    brier_decomposition,
+    reliability_curve,
+    temporal_calibration_cv,
+    paired_bootstrap_compare,
+    baseline_results,
+    run_evaluation,
+)
 
 
 class TestCrisisDataset:
@@ -143,3 +154,94 @@ class TestBacktest:
     def test_pr_auc_positive(self):
         result = run_backtest()
         assert result.pr_auc > 0.0
+
+
+class TestEvaluationMetrics:
+    def test_auc_perfect_and_reversed(self):
+        labels = [1, 1, 0, 0]
+        assert auc_score([1.0, 1.0, 0.0, 0.0], labels) == pytest.approx(1.0)
+        assert auc_score([0.0, 0.0, 1.0, 1.0], labels) == pytest.approx(0.0)
+
+    def test_auc_handles_ties(self):
+        # All-equal scores → AUC exactly 0.5 (mid-rank handling)
+        assert auc_score([5.0, 5.0, 5.0, 5.0], [1, 0, 1, 0]) == pytest.approx(0.5)
+
+    def test_auc_matches_trapezoidal_backtest(self):
+        # New rank-based AUC should agree with the existing trapezoidal one
+        import random
+        random.seed(7)
+        scores = [random.uniform(0, 100) for _ in range(150)]
+        labels = [random.randint(0, 1) for _ in range(150)]
+        fprs, tprs, _ = _roc_curve(scores, labels)
+        trap = _auc_from_sorted(fprs, tprs)
+        assert auc_score(scores, labels) == pytest.approx(trap, abs=0.01)
+
+    def test_average_precision_perfect(self):
+        assert average_precision([1.0, 1.0, 0.0, 0.0], [1, 1, 0, 0]) == pytest.approx(1.0)
+
+    def test_bootstrap_ci_brackets_point(self):
+        scores = [90, 85, 80, 20, 15, 10, 70, 30]
+        labels = [1, 1, 1, 0, 0, 0, 1, 0]
+        ci = bootstrap_ci(scores, labels, auc_score, n_boot=500, seed=1)
+        assert ci["ci_low"] <= ci["point"] <= ci["ci_high"]
+        assert ci["n_boot"] == 500
+
+    def test_brier_decomposition_identity(self):
+        # BS = reliability − resolution + uncertainty (Murphy identity)
+        import random
+        random.seed(3)
+        probs = [random.random() for _ in range(200)]
+        labels = [random.randint(0, 1) for _ in range(200)]
+        d = brier_decomposition(probs, labels, n_bins=10)
+        recon = d["reliability"] - d["resolution"] + d["uncertainty"]
+        assert recon == pytest.approx(d["brier"], abs=0.02)
+
+    def test_reliability_curve_well_formed(self):
+        probs = [0.05, 0.15, 0.85, 0.95, 0.45, 0.55]
+        labels = [0, 0, 1, 1, 0, 1]
+        curve = reliability_curve(probs, labels, n_bins=5)
+        assert all(0.0 <= b["observed_frequency"] <= 1.0 for b in curve)
+        assert all(b["count"] >= 1 for b in curve)
+
+    def test_temporal_cv_no_lookahead(self):
+        from core.calibration.crisis_dataset import ALL_EVENTS as EV
+        from core.calibration.backtest import _heuristic_score
+        cv = temporal_calibration_cv(EV, _heuristic_score)
+        assert cv["available"] is True
+        # every fold trains only on strictly-earlier years
+        for f in cv["folds"]:
+            assert f["n_train"] > 0 and f["n_test"] > 0
+
+    def test_paired_bootstrap_detects_difference(self):
+        from core.calibration.crisis_dataset import ALL_EVENTS as EV
+        from core.calibration.backtest import _heuristic_score
+        import numpy as np
+        labels = [e.label for e in EV]
+        good = [_heuristic_score(e) for e in EV]
+        rand = list(np.random.default_rng(0).random(len(EV)))
+        cmp = paired_bootstrap_compare(good, rand, labels, n_boot=500)
+        assert cmp["favours"] == "A"
+        assert cmp["delta"] > 0
+
+    def test_baselines_present(self):
+        from core.calibration.crisis_dataset import ALL_EVENTS as EV
+        b = baseline_results(EV)
+        assert "random" in b and "base_rate" in b and "crisis_type_prior" in b
+
+
+class TestRunEvaluation:
+    def test_report_structure(self):
+        rep = run_evaluation(n_boot=300)
+        assert rep.n_events == len(ALL_EVENTS)
+        assert rep.auc["point"] >= 0.5
+        assert rep.average_precision["point"] >= 0.0
+        assert rep.temporal_cv["available"] is True
+        assert "reliability" in rep.brier_decomposition
+        assert rep.score_source.startswith("heuristic")
+
+    def test_live_db_scores_path(self):
+        # Supplying perfect DB scores should be reflected in score_source + AUC
+        db = {(e.country, e.year): 90.0 if e.label == 1 else 10.0 for e in ALL_EVENTS}
+        rep = run_evaluation(db_scores=db, n_boot=300)
+        assert "live_db" in rep.score_source
+        assert rep.auc["point"] > 0.9
