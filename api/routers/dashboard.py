@@ -2002,7 +2002,61 @@ def _svg_histogram(values: list[float], w: int = 560, h: int = 300, bins: int = 
     return f'<svg viewBox="0 0 {w} {h}" width="100%">{out}</svg>'
 
 
-def _build_validation(bt, scores: list) -> str:
+def _svg_reliability(curve: list[dict], w: int = 360, h: int = 360) -> str:
+    """Reliability diagram: mean predicted (x) vs observed frequency (y), bubble = count."""
+    pad = 42
+    X = lambda v: pad + (w - 2 * pad) * v
+    Y = lambda v: (h - pad) - (h - 2 * pad) * v
+    out = (f'<rect x="{pad}" y="{pad}" width="{w-2*pad}" height="{h-2*pad}" '
+           f'fill="#fcfcfa" stroke="#ddd"/>')
+    # perfect-calibration diagonal
+    out += (f'<line x1="{X(0):.1f}" y1="{Y(0):.1f}" x2="{X(1):.1f}" y2="{Y(1):.1f}" '
+            f'stroke="#bbb" stroke-dasharray="3 3"/>')
+    if curve:
+        mx = max((p["count"] for p in curve), default=1) or 1
+        pts = " ".join(f"{X(p['mean_predicted']):.1f},{Y(p['observed_frequency']):.1f}" for p in curve)
+        out += f'<polyline points="{pts}" fill="none" stroke="#1f5f3a" stroke-width="1.6"/>'
+        for p in curve:
+            r = 2.5 + 5 * (p["count"] / mx) ** 0.5
+            out += (f'<circle cx="{X(p["mean_predicted"]):.1f}" cy="{Y(p["observed_frequency"]):.1f}" '
+                    f'r="{r:.1f}" fill="#1f5f3a" fill-opacity="0.7" stroke="#000" stroke-width="0.5">'
+                    f'<title>pred {p["mean_predicted"]:.2f} / obs {p["observed_frequency"]:.2f} '
+                    f'(n={p["count"]})</title></circle>')
+    for t in (0, 0.25, 0.5, 0.75, 1.0):
+        out += (f'<text x="{X(t):.1f}" y="{h-pad+14:.1f}" font-size="7.5" text-anchor="middle" '
+                f'font-family="monospace" fill="#999">{t:g}</text>'
+                f'<text x="{pad-6:.1f}" y="{Y(t)+3:.1f}" font-size="7.5" text-anchor="end" '
+                f'font-family="monospace" fill="#999">{t:g}</text>')
+    out += (f'<text x="{w/2:.1f}" y="{h-8:.1f}" font-size="9" text-anchor="middle" '
+            f'font-family="monospace" fill="#555">mean predicted probability &#8594;</text>'
+            f'<text x="12" y="{h/2:.1f}" font-size="9" text-anchor="middle" '
+            f'font-family="monospace" fill="#555" '
+            f'transform="rotate(-90 12 {h/2:.1f})">observed frequency &#8594;</text>')
+    return f'<svg viewBox="0 0 {w} {h}" width="100%" style="max-width:380px">{out}</svg>'
+
+
+def _ci_bar(point: float, lo, hi, label: str, ref: float = 0.5) -> str:
+    """Horizontal metric bar with a bootstrap CI whisker and a no-skill reference tick."""
+    X = lambda v: max(0.0, min(1.0, v)) * 100
+    whisker = ""
+    if lo is not None and hi is not None:
+        whisker = (f'<span style="position:absolute;left:{X(lo):.1f}%;width:{max(0.5,X(hi)-X(lo)):.1f}%;'
+                   f'top:50%;height:0;border-top:2px solid #000;opacity:.55"></span>'
+                   f'<span style="position:absolute;left:{X(lo):.1f}%;top:30%;height:40%;'
+                   f'border-left:1px solid #000"></span>'
+                   f'<span style="position:absolute;left:{X(hi):.1f}%;top:30%;height:40%;'
+                   f'border-left:1px solid #000"></span>')
+    return (f'<div style="display:flex;align-items:center;gap:8px;margin:4px 0;font-size:11px">'
+            f'<span style="width:150px" class="mono">{label}</span>'
+            f'<span style="flex:1;height:14px;border:1px solid #000;background:#fff;position:relative">'
+            f'<span style="position:absolute;left:0;top:0;bottom:0;width:{X(point):.1f}%;'
+            f'background:{_risk_color(point*100)}"></span>'
+            f'<span style="position:absolute;left:{X(ref):.1f}%;top:-2px;bottom:-2px;'
+            f'border-left:1px dashed #777"></span>{whisker}</span>'
+            f'<span class="mono" style="width:42px;text-align:right">{point:.3f}</span></div>')
+
+
+def _build_validation(bt, scores: list, ev=None) -> str:
     roc = _svg_roc(bt.roc_curve, bt.auc)
     dist = _svg_histogram([s.composite for s in scores])
     kpis = [("ROC-AUC", f"{bt.auc:.2f}"), ("Brier", f"{bt.brier_score:.3f}"),
@@ -2023,6 +2077,64 @@ def _build_validation(bt, scores: list) -> str:
                    f'<span style="position:absolute;left:0;top:0;bottom:0;width:{w}%;background:{_risk_color(auc*100)}"></span></span>'
                    f'<span class="mono" style="width:36px;text-align:right">{auc:.2f}</span></div>')
 
+    eval_section = ""
+    if ev is not None:
+        auc, ap = ev.auc, ev.average_precision
+        bd = ev.brier_decomposition
+        bl = ev.baselines
+        tcv = ev.temporal_cv
+        bars = _ci_bar(auc["point"], auc.get("ci_low"), auc.get("ci_high"), "Model AUC")
+        bars += _ci_bar(ap["point"], ap.get("ci_low"), ap.get("ci_high"),
+                        f"Model AP (base {ev.base_rate:.2f})", ref=ev.base_rate)
+        bars += _ci_bar(bl["crisis_type_prior"]["point"], bl["crisis_type_prior"].get("ci_low"),
+                        bl["crisis_type_prior"].get("ci_high"), "Baseline: type prior")
+        bars += _ci_bar(bl["random"]["point"], bl["random"].get("ci_low"),
+                        bl["random"].get("ci_high"), "Baseline: random")
+
+        rel_svg = ""
+        oos_line = ""
+        if tcv.get("available"):
+            rel_svg = _svg_reliability(tcv.get("reliability_curve", []))
+            oa = tcv["oos_auc"]
+            oos_line = (f'Walk-forward out-of-sample (n={tcv["n_oos"]}, {tcv["n_folds"]} folds): '
+                        f'AUC <b>{oa["point"]:.3f}</b> '
+                        f'[{oa.get("ci_low")}, {oa.get("ci_high")}], '
+                        f'Brier <b>{tcv["oos_brier"]["brier"]}</b>.')
+        else:
+            rel_svg = '<div class="vsub">Temporal CV unavailable for this dataset slice.</div>'
+
+        decomp = (
+            f'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">' +
+            "".join(
+                f'<div style="flex:1;min-width:74px;border:1px solid #000;padding:6px 8px;background:#fff">'
+                f'<div style="font-size:15px;font-weight:bold;font-family:monospace">{bd[k] if bd[k] is not None else "—"}</div>'
+                f'<div style="font-size:8px;letter-spacing:.05em;color:#666;text-transform:uppercase">{lbl}</div></div>'
+                for k, lbl in [("reliability", "reliability&#8595;"), ("resolution", "resolution&#8593;"),
+                               ("uncertainty", "uncertainty"), ("skill_score", "skill&#8593;")]
+            ) + '</div>')
+
+        eval_section = f"""
+<div class="vrow">
+  <div class="vcard">
+    <div class="vh2">Rigorous metrics — bootstrap CIs &amp; no-skill floors</div>
+    <div class="vsub">Stratified 2000-replicate bootstrap. Dashed tick = no-skill
+      reference. A model bar whose CI clears the baseline is real skill, not noise.</div>
+    {bars}
+    <div class="vh2" style="margin-top:12px">Brier decomposition (Murphy 1973)</div>
+    <div class="vsub">BS = reliability &#8722; resolution + uncertainty. Lower reliability =
+      better calibration; higher resolution = better discrimination.</div>
+    {decomp}
+  </div>
+  <div class="vcard">
+    <div class="vh2">Reliability diagram — walk-forward calibration</div>
+    <div class="vsub">Logistic calibration fit on prior years only, evaluated on held-out
+      years (no look-ahead). On the diagonal = well-calibrated.</div>
+    {rel_svg}
+    <div class="vsub" style="margin-top:8px">{oos_line}</div>
+  </div>
+</div>
+<div class="note-i" style="padding:6px 12px 0"><b>Score source:</b> {ev.score_source}</div>"""
+
     return _head("VisibleHand — Validation") + f"""
 <body>
 {_menubar(["File","Edit","View"])}
@@ -2034,6 +2146,7 @@ def _build_validation(bt, scores: list) -> str:
   <span style="color:#555">2000–2023 backtest</span>
 </div>
 <div style="display:flex;gap:8px;flex-wrap:wrap;padding:10px 12px;border-bottom:1px solid #000">{kpi_html}</div>
+{eval_section}
 <div class="vrow">
   <div class="vcard">
     <div class="vh2">ROC curve — does an elevated score precede a crisis?</div>
@@ -2256,10 +2369,14 @@ async def studio_page(db: Session = Depends(get_db)) -> HTMLResponse:
 
 @router.get("/validation", response_class=HTMLResponse, include_in_schema=False)
 async def validation_page(db: Session = Depends(get_db)) -> HTMLResponse:
-    from api.routers.calibration import _cached_backtest
+    from api.routers.calibration import _cached_backtest, _cached_evaluation
     bt = _cached_backtest()
+    try:
+        ev = _cached_evaluation(2000)
+    except Exception:
+        ev = None
     scores = _latest_scores(db)
-    return HTMLResponse(_build_validation(bt, scores))
+    return HTMLResponse(_build_validation(bt, scores, ev=ev))
 
 
 # â”€â”€ ASCII terminal: rotating 3D globe + ASCII charts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
