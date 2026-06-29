@@ -1694,12 +1694,38 @@ def _build_studio(latest: list) -> str:
     <b>Live</b> reconstructs point-in-time composites where the DB has coverage and reports
     that coverage honestly.</div>
 </div></div>
+<div class="lab-hd">SQL console — query the cross-section in your browser (DuckDB-WASM)</div>
+<div class="shockrow" style="align-items:stretch">
+  <div class="sgrp" style="flex:1;min-width:320px"><span class="gl">SQL — table <b>vh</b>(code, name, composite, economic, political, nlp, governance, confidence, ci_low, ci_high)</span>
+    <textarea id="sqlq" spellcheck="false" style="width:100%;height:74px;font:11px 'Cascadia Mono',Consolas,monospace;border:1px solid #000;padding:5px;resize:vertical">SELECT code, name, composite, governance
+FROM vh
+WHERE composite &gt; 50
+ORDER BY composite DESC
+LIMIT 15;</textarea></div>
+  <div class="sgrp" style="align-self:flex-end"><span class="gl">&nbsp;</span>
+    <span style="display:flex;gap:4px;flex-direction:column">
+      <button class="sbtn go" id="runsql">Run SQL &#9654;</button>
+      <button class="sbtn" id="sqlcsv">Export CSV</button></span></div>
+  <div class="sgrp" style="align-self:flex-end"><span class="gl">Examples</span>
+    <span style="display:flex;gap:4px;flex-wrap:wrap">
+      <button class="sbtn" data-sql="SELECT CASE WHEN composite&lt;20 THEN 'Low' WHEN composite&lt;40 THEN 'Watch' WHEN composite&lt;60 THEN 'Elevated' WHEN composite&lt;75 THEN 'High' ELSE 'Severe' END AS band, COUNT(*) n, ROUND(AVG(composite),1) avg_comp FROM vh GROUP BY band ORDER BY avg_comp;">Band histogram</button>
+      <button class="sbtn" data-sql="SELECT code, name, governance, economic, ROUND(governance-economic,1) AS gap FROM vh ORDER BY gap DESC LIMIT 12;">Gov vs econ gap</button>
+      <button class="sbtn" data-sql="SELECT ROUND(CORR(governance,composite),3) AS corr_gov_comp, ROUND(CORR(economic,composite),3) AS corr_econ_comp FROM vh;">Correlations</button>
+    </span></div>
+  <div class="sgrp" style="flex:1;min-width:140px"><span class="gl">Status</span>
+    <span id="sqlstatus" style="font:11px Geneva,sans-serif;color:#555">idle &#183; engine loads on first run</span></div>
+</div>
+<div class="vcard" style="border-right:none"><div class="tbl-scroll" style="max-height:300px"><div id="sqlout">
+  <div class="vsub" style="padding:6px">Runs entirely in your browser — no server round-trip. DuckDB-WASM (~few MB) loads
+    lazily from CDN on the first query. Full SQL: joins, aggregates, window functions, CORR, etc.</div>
+</div></div></div>
 {_tabbar([("Browse","/"),("Dashboard","/dashboard"),("Compare","/compare"),("Map","/map"),("Studio",""),("Validation","/validation"),("API","/api"),("",""),("Exit","/")], active="Studio")}
 </div></div>
 <div class="toast" id="toast"></div>
 """
     data_script = f'<script>window.VH_DATA={data_json};</script>'
-    return head + "<style>" + _STUDIO_CSS + "</style>" + shell + data_script + _STUDIO_JS + "</body></html>"
+    return (head + "<style>" + _STUDIO_CSS + "</style>" + shell + data_script
+            + _STUDIO_JS + _STUDIO_SQL_JS + "</body></html>")
 
 
 _STUDIO_JS = r"""<script>(function(){
@@ -2175,6 +2201,101 @@ _STUDIO_JS = r"""<script>(function(){
 
   render();
 })();</script>"""
+
+
+# DuckDB-WASM SQL console — runs entirely client-side. Loaded lazily on first
+# query (the ~few-MB wasm bundle is fetched from CDN only when the researcher
+# actually runs SQL). Defensive: any failure surfaces as a status message and
+# never breaks the rest of the Studio.
+_STUDIO_SQL_JS = r"""<script type="module">
+(function(){
+  var $=function(id){return document.getElementById(id);};
+  var conn=null, last=null, busy=false;
+  function status(m){ var s=$("sqlstatus"); if(s) s.textContent=m; }
+
+  async function initDuck(){
+    if(conn) return conn;
+    status("loading DuckDB-WASM (one-time)…");
+    var duckdb=await import("https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.29.0/+esm");
+    var bundles=duckdb.getJsDelivrBundles();
+    var bundle=await duckdb.selectBundle(bundles);
+    var workerUrl=URL.createObjectURL(new Blob(
+      ['importScripts("'+bundle.mainWorker+'");'], {type:"text/javascript"}));
+    var worker=new Worker(workerUrl);
+    var db=new duckdb.AsyncDuckDB(new duckdb.ConsoleLogger(), worker);
+    await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
+    URL.revokeObjectURL(workerUrl);
+    conn=await db.connect();
+    var rows=(window.VH_DATA||[]).map(function(d){
+      return {code:d.code,name:d.name,composite:d.c,economic:d.e,political:d.p,
+              nlp:d.n,governance:d.g,confidence:d.conf,ci_low:d.cl,ci_high:d.ch};
+    });
+    await db.registerFileText("vh.json", JSON.stringify(rows));
+    await conn.insertJSONFromPath("vh.json", {name:"vh"});
+    status("engine ready · "+rows.length+" rows");
+    return conn;
+  }
+
+  function render(cols, data){
+    if(!data.length){ $("sqlout").innerHTML='<div class="vsub" style="padding:6px">No rows.</div>'; return; }
+    var h='<table class="stbl"><thead><tr>';
+    cols.forEach(function(c){ h+='<th class="l">'+c+'</th>'; });
+    h+='</tr></thead><tbody>';
+    data.forEach(function(r){
+      h+='<tr>';
+      cols.forEach(function(c){
+        var v=r[c]; if(v===null||v===undefined) v='';
+        else if(typeof v==='number') v=(Math.round(v*1000)/1000);
+        h+='<td class="l">'+v+'</td>';
+      });
+      h+='</tr>';
+    });
+    h+='</tbody></table>';
+    $("sqlout").innerHTML=h;
+  }
+
+  async function runSQL(sql){
+    if(busy){ return; }
+    busy=true;
+    var rb=$("runsql"); if(rb) rb.disabled=true;
+    try{
+      var c=await initDuck();
+      status("running…");
+      var res=await c.query(sql);
+      var cols=res.schema.fields.map(function(f){return f.name;});
+      var data=res.toArray().map(function(row){
+        var o={}; cols.forEach(function(col){ var v=row[col];
+          o[col]=(typeof v==='bigint')?Number(v):v; }); return o;
+      });
+      last={cols:cols, data:data};
+      render(cols, data);
+      status("ok · "+data.length+" rows");
+    }catch(e){
+      status("error");
+      $("sqlout").innerHTML='<div class="vsub" style="padding:6px;color:#a8322f">'+
+        String(e&&e.message?e.message:e)+'</div>';
+    }finally{
+      busy=false; var rb2=$("runsql"); if(rb2) rb2.disabled=false;
+    }
+  }
+
+  if($("runsql")) $("runsql").addEventListener("click", function(){ runSQL($("sqlq").value); });
+  Array.prototype.forEach.call(document.querySelectorAll("[data-sql]"), function(b){
+    b.addEventListener("click", function(){ $("sqlq").value=b.getAttribute("data-sql"); runSQL(b.getAttribute("data-sql")); });
+  });
+  if($("sqlcsv")) $("sqlcsv").addEventListener("click", function(){
+    if(!last){ status("run a query first"); return; }
+    var lines=[last.cols.join(",")];
+    last.data.forEach(function(r){
+      lines.push(last.cols.map(function(c){ var v=r[c]; if(v===null||v===undefined)v="";
+        v=String(v); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; }).join(","));
+    });
+    var blob=new Blob([lines.join("\n")],{type:"text/csv"});
+    var a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+    a.download="visiblehand_sql.csv"; document.body.appendChild(a); a.click(); a.remove();
+  });
+})();
+</script>"""
 
 
 # ── Calibration / validation visuals (inline SVG, no JS libs) ────────────────
