@@ -1481,6 +1481,17 @@ _STUDIO_CSS = """
   padding:1px 5px;color:#555}
 .corr-c{font:9px Geneva,Verdana,sans-serif}
 .note-i{font:10px Geneva,Verdana,sans-serif;color:#666;padding:0 12px 8px}
+.lab-hd{font:bold 12px Geneva,Verdana,sans-serif;background:#1f5f3a;color:#fff;
+  padding:6px 12px;border-top:2px solid #000;border-bottom:1px solid #000;
+  letter-spacing:.04em;text-transform:uppercase}
+.shockrow{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;padding:9px 12px;
+  background:#eef0e6;border-bottom:1px solid #000}
+.shk .wv{color:#1f5f3a}
+.bandshift{font:10px "Cascadia Mono",Consolas,monospace}
+.focus-sel{font:11px Geneva,Verdana,sans-serif;border:1px solid #000;background:#fff;padding:2px 4px}
+.solve{font:11px Geneva,Verdana,sans-serif;line-height:1.7;background:#f4f1e6;
+  border:1px solid #cabfa0;padding:8px 10px;margin-top:6px}
+.solve b{font-family:"Cascadia Mono",Consolas,monospace}
 """
 
 _STUDIO_AXES = [("comp", "Composite (re-blended)"), ("c", "Composite (published)"),
@@ -1523,6 +1534,9 @@ def _build_studio(latest: list) -> str:
             f'<input type="checkbox" class="srcck" data-fam="{key}" checked> '
             f'<b>{label}</b></label><div class="srcchips">{chips}</div></div>'
         )
+
+    focus_opts = "".join(
+        f'<option value="{d["code"]}">{d["code"]} — {d["name"]}</option>' for d in data)
 
     opts = "".join(f'<option value="{k}">{lbl}</option>' for k, lbl in _STUDIO_AXES)
     xopts = opts.replace('value="e"', 'value="e" selected')
@@ -1618,6 +1632,46 @@ def _build_studio(latest: list) -> str:
       <th data-k="conf">Conf</th>
     </tr></thead><tbody id="tbody"></tbody>
   </table></div>
+</div>
+<div class="lab-hd">Scenario Lab — stress-test the world</div>
+<div class="shockrow">
+  <div class="sgrp shk"><span class="gl">&#916; Economic <span id="se_v" class="wv">0</span></span>
+    <span class="wgt"><input type="range" id="se" min="-30" max="30" value="0"></span></div>
+  <div class="sgrp shk"><span class="gl">&#916; Political <span id="sp_v" class="wv">0</span></span>
+    <span class="wgt"><input type="range" id="sp" min="-30" max="30" value="0"></span></div>
+  <div class="sgrp shk"><span class="gl">&#916; NLP <span id="sn_v" class="wv">0</span></span>
+    <span class="wgt"><input type="range" id="sn" min="-30" max="30" value="0"></span></div>
+  <div class="sgrp shk"><span class="gl">&#916; Governance <span id="sg_v" class="wv">0</span></span>
+    <span class="wgt"><input type="range" id="sg" min="-30" max="30" value="0"></span></div>
+  <div class="sgrp"><span class="gl">Stress preset</span>
+    <span style="display:flex;gap:4px;flex-wrap:wrap">
+      <button class="sbtn" data-shock="18,8,6,0">2008 GFC</button>
+      <button class="sbtn" data-shock="15,5,0,2">Commodity crash</button>
+      <button class="sbtn" data-shock="3,22,6,9">Political contagion</button>
+      <button class="sbtn" data-shock="-12,-9,-5,-5">Broad recovery</button>
+      <button class="sbtn go" data-shock="0,0,0,0">Reset</button>
+    </span></div>
+</div>
+<div class="vrow">
+  <div class="vcard" style="flex:1.2">
+    <div class="vh2">Scenario impact — who moves, and across which band</div>
+    <div class="vsub">Applies the shock to every country's sub-scores, re-blends, and ranks
+      by absolute change. Arrow shows a risk-band crossing.</div>
+    <div class="tbl-scroll" style="max-height:260px"><table class="stbl" id="scntbl">
+      <thead><tr><th class="l">Country</th><th>Base</th><th>Scenario</th>
+        <th>&#916;</th><th class="l">Band shift</th></tr></thead>
+      <tbody id="scnbody"></tbody></table></div>
+  </div>
+  <div class="vcard">
+    <div class="vh2">Driver sensitivity &amp; inverse solver</div>
+    <div class="vsub">Pick a country: the tornado shows how a &#177;10-pt move in each driver
+      shifts its composite; the solver finds the smallest single-driver change to
+      leave its current band.</div>
+    <div class="sgrp" style="margin:4px 0 8px"><span class="gl">Focus country</span>
+      <select class="focus-sel" id="focus">{focus_opts}</select></div>
+    <div id="tornado"></div>
+    <div class="solve" id="solve"></div>
+  </div>
 </div>
 {_tabbar([("Browse","/"),("Dashboard","/dashboard"),("Compare","/compare"),("Map","/map"),("Studio",""),("Validation","/validation"),("API","/api"),("",""),("Exit","/")], active="Studio")}
 </div></div>
@@ -1834,10 +1888,104 @@ _STUDIO_JS = r"""<script>(function(){
       +"&nlp_weight="+n.n.toFixed(2)+"&governance_weight="+n.g.toFixed(2);
   }
 
+  // ---- Scenario Lab ----
+  var SHOCK={e:0,p:0,n:0,g:0};
+  var BANDS=["Low","Watch","Elevated","High","Severe"];
+  var BAND_LO=[0,20,40,60,75];
+  function clamp01(v){ return Math.max(0,Math.min(100,v)); }
+  function reblendShocked(d){
+    var num=0,den=0,m={e:d.e,p:d.p,n:d.n,g:d.g},k;
+    for(k in m){ if(ACTIVE[k]&&m[k]!=null){ num+=W[k]*clamp01(m[k]+SHOCK[k]); den+=W[k]; } }
+    return den>0?num/den:null;
+  }
+  function reblendWith(d,key,val){
+    var num=0,den=0,m={e:d.e,p:d.p,n:d.n,g:d.g},k;
+    for(k in m){ if(ACTIVE[k]&&m[k]!=null){ var v=(k===key)?val:m[k]; num+=W[k]*clamp01(v); den+=W[k]; } }
+    return den>0?num/den:null;
+  }
+
+  function drawScenario(){
+    var rows=DATA.map(function(d){
+      var base=reblend(d), scn=reblendShocked(d);
+      return {code:d.code,name:d.name,base:base,scn:scn,
+        delta:(base!=null&&scn!=null)?scn-base:null};
+    }).filter(function(r){return r.delta!=null;});
+    rows.sort(function(a,b){return Math.abs(b.delta)-Math.abs(a.delta);});
+    var html="";
+    rows.forEach(function(r){
+      var b0=band(r.base), b1=band(r.scn);
+      var shift=(b0===b1)?'<span style="color:#999">—</span>':
+        '<span class="bandshift" style="color:'+(b1>b0?"#a8322f":"#1f5f3a")+'">'
+        +BANDS[b0]+(b1>b0?" &#8593; ":" &#8595; ")+BANDS[b1]+'</span>';
+      var dc=r.delta>=0?"up":"dn", ds=(r.delta>=0?"+":"")+r.delta.toFixed(1);
+      html+='<tr><td class="l"><b>'+r.code+'</b> <span style="color:#888">'+r.name+'</span></td>'
+        +'<td>'+r.base.toFixed(1)+'</td>'
+        +'<td style="color:'+color(r.scn)+';font-weight:bold">'+r.scn.toFixed(1)+'</td>'
+        +'<td class="'+dc+'">'+ds+'</td><td class="l">'+shift+'</td></tr>';
+    });
+    $("scnbody").innerHTML=html;
+  }
+
+  function drawTornado(code){
+    var d=DATA.filter(function(x){return x.code===code;})[0];
+    if(!d){ $("tornado").innerHTML=""; return; }
+    var base=reblend(d); if(base==null){ $("tornado").innerHTML='<div class="vsub">No active drivers.</div>'; return; }
+    var drv=[["e","Economic"],["p","Political"],["n","NLP"],["g","Governance"]];
+    var bars=drv.map(function(dr){
+      var k=dr[0];
+      if(d[k]==null||!ACTIVE[k]) return {label:dr[1],up:0,dn:0,na:true};
+      return {label:dr[1],up:reblendWith(d,k,d[k]+10)-base,dn:reblendWith(d,k,d[k]-10)-base,na:false};
+    });
+    var mAbs=1; bars.forEach(function(b){ mAbs=Math.max(mAbs,Math.abs(b.up),Math.abs(b.dn)); });
+    var w=300,rowh=26,h=bars.length*rowh+22,midx=w/2,half=midx-80;
+    var s='<svg viewBox="0 0 '+w+' '+h+'" width="100%" style="font:10px Geneva,sans-serif">';
+    s+='<line x1="'+midx+'" y1="6" x2="'+midx+'" y2="'+(h-16)+'" stroke="#000"/>';
+    bars.forEach(function(b,i){
+      var y=10+i*rowh;
+      if(!b.na){
+        var wu=(b.up/mAbs)*half, wd=(b.dn/mAbs)*half;
+        s+='<rect x="'+Math.min(midx,midx+wu).toFixed(1)+'" y="'+y+'" width="'+Math.abs(wu).toFixed(1)+'" height="9" fill="#a8322f" stroke="#000" stroke-width="0.5"><title>+10 &#8594; '+(b.up>=0?"+":"")+b.up.toFixed(1)+'</title></rect>';
+        s+='<rect x="'+Math.min(midx,midx+wd).toFixed(1)+'" y="'+(y+10)+'" width="'+Math.abs(wd).toFixed(1)+'" height="9" fill="#1f5f3a" stroke="#000" stroke-width="0.5"><title>-10 &#8594; '+(b.dn>=0?"+":"")+b.dn.toFixed(1)+'</title></rect>';
+      } else {
+        s+='<text x="'+(midx+4)+'" y="'+(y+12)+'" fill="#aaa" font-size="9">inactive</text>';
+      }
+      s+='<text x="4" y="'+(y+13)+'" fill="#333">'+b.label+'</text>';
+    });
+    s+='<text x="'+(midx+3)+'" y="'+(h-4)+'" fill="#a8322f" font-size="8">+10 pt driver &#8594;</text>';
+    s+='<text x="'+(midx-3)+'" y="'+(h-4)+'" text-anchor="end" fill="#1f5f3a" font-size="8">&#8592; -10 pt driver</text>';
+    s+='</svg>'; $("tornado").innerHTML=s;
+  }
+
+  function inverseSolve(code){
+    var d=DATA.filter(function(x){return x.code===code;})[0];
+    var el=$("solve"); if(!d){ el.innerHTML=""; return; }
+    var base=reblend(d); if(base==null){ el.innerHTML="No active drivers."; return; }
+    var cb=band(base);
+    if(cb===0){ el.innerHTML='<b>'+code+'</b> is already in the lowest band ('+BANDS[0]+', '+base.toFixed(1)+'). No reduction needed.'; return; }
+    var thresh=BAND_LO[cb];
+    var html='<b>'+code+'</b> sits at <b>'+base.toFixed(1)+'</b> ('+BANDS[cb]+'). Smallest single-driver cut to drop below '+thresh+' ('+BANDS[cb-1]+'):<br>';
+    var drv=[["e","Economic"],["p","Political"],["n","NLP"],["g","Governance"]], any=false;
+    drv.forEach(function(dr){
+      var k=dr[0]; if(d[k]==null||!ACTIVE[k]) return;
+      var found=null;
+      for(var x=1;x<=60;x++){ var c=reblendWith(d,k,d[k]-x); if(c!=null&&c<thresh){ found=x; break; } }
+      if(found!=null){ any=true; html+='&#8226; cut <b>'+dr[1]+'</b> by &#8805; <b>'+found+'</b> pts (&#8594; '+(d[k]-found).toFixed(0)+')<br>'; }
+      else { html+='&#8226; '+dr[1]+' alone: <span style="color:#999">can’t reach the band</span><br>'; }
+    });
+    if(!any) html+='<span style="color:#999">No single driver suffices — needs a combined move.</span>';
+    el.innerHTML=html;
+  }
+
+  function renderLab(){
+    drawScenario();
+    var f=$("focus")?$("focus").value:null;
+    if(f){ drawTornado(f); inverseSolve(f); }
+  }
+
   function render(){
     var rows=compute();
     var fit=drawScatter(rows); drawHist(rows); drawCorr(rows); drawTable(rows);
-    drawStats(rows, fit);
+    drawStats(rows, fit); renderLab();
     $("urlout").textContent=apiURL();
   }
 
@@ -1885,6 +2033,23 @@ _STUDIO_JS = r"""<script>(function(){
     if(navigator.clipboard){ navigator.clipboard.writeText(url).then(function(){toast("API weights copied");},function(){toast(url);}); }
     else { toast(url); }
   });
+
+  // scenario shock sliders
+  function bindShock(id,key){
+    var el=$(id); el.addEventListener("input",function(){ SHOCK[key]=+el.value; $(id+"_v").textContent=(el.value>0?"+":"")+el.value; drawScenario(); });
+  }
+  bindShock("se","e"); bindShock("sp","p"); bindShock("sn","n"); bindShock("sg","g");
+  Array.prototype.forEach.call(document.querySelectorAll("[data-shock]"),function(b){
+    b.addEventListener("click",function(){
+      var p=b.getAttribute("data-shock").split(",").map(Number);
+      SHOCK.e=p[0];SHOCK.p=p[1];SHOCK.n=p[2];SHOCK.g=p[3];
+      $("se").value=p[0];$("sp").value=p[1];$("sn").value=p[2];$("sg").value=p[3];
+      $("se_v").textContent=(p[0]>0?"+":"")+p[0];$("sp_v").textContent=(p[1]>0?"+":"")+p[1];
+      $("sn_v").textContent=(p[2]>0?"+":"")+p[2];$("sg_v").textContent=(p[3]>0?"+":"")+p[3];
+      drawScenario();
+    });
+  });
+  if($("focus")) $("focus").addEventListener("change",function(){ var f=$("focus").value; drawTornado(f); inverseSolve(f); });
 
   // source-family toggles
   Array.prototype.forEach.call(document.querySelectorAll(".srcck"),function(ck){
