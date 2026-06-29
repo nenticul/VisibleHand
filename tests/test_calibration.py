@@ -245,3 +245,78 @@ class TestRunEvaluation:
         rep = run_evaluation(db_scores=db, n_boot=300)
         assert "live_db" in rep.score_source
         assert rep.auc["point"] > 0.9
+
+
+from types import SimpleNamespace
+
+
+class _FakeQuery:
+    def __init__(self, rows):
+        self._rows = rows
+    def filter(self, *a, **k):
+        return self
+    def all(self):
+        return list(self._rows)
+
+
+class _FakeSession:
+    """Minimal stand-in: returns rows per model name; filter() is a no-op so tests
+    use single-country event sets."""
+    def __init__(self, store):
+        self.store = store
+    def query(self, model):
+        name = getattr(model, "__name__", str(model))
+        return _FakeQuery(self.store.get(name, []))
+    def close(self):
+        pass
+
+
+class TestPanelMaterialisation:
+    def test_before_point_in_time(self):
+        from core.calibration.panel import _before
+        # annual indicator: included only if its year < crisis year
+        assert _before(SimpleNamespace(year=2016, date=None), 2018, "2018-01-01") is True
+        assert _before(SimpleNamespace(year=2018, date=None), 2018, "2018-01-01") is False
+        assert _before(SimpleNamespace(year=2020, date=None), 2018, "2018-01-01") is False
+        # daily indicator: included only if its date is before the cutoff
+        assert _before(SimpleNamespace(year=None, date="2017-06-01"), 2018, "2018-01-01") is True
+        assert _before(SimpleNamespace(year=None, date="2018-06-01"), 2018, "2018-01-01") is False
+
+    def test_empty_db_all_insufficient(self, monkeypatch):
+        import core.calibration.panel as panel
+        monkeypatch.setattr(panel, "ALL_EVENTS",
+                            [SimpleNamespace(country="AR", year=2018, crisis_type="currency", label=1)])
+        db = _FakeSession({})
+        out = panel.materialize_crisis_panel(db)
+        assert out["scores"] == {}
+        assert out["coverage"]["live"] == 0
+        assert out["coverage"]["insufficient"] == 1
+
+    def test_scores_when_data_present(self, monkeypatch):
+        import core.calibration.panel as panel
+        monkeypatch.setattr(panel, "ALL_EVENTS",
+                            [SimpleNamespace(country="AR", year=2018, crisis_type="currency", label=1)])
+        # economic history strictly before 2018, plus a leaking 2019 row
+        ind = [SimpleNamespace(country_code="AR", metric="gdp_growth", year=y, date=None,
+                               value=float(2 - (y - 2010) * 0.3)) for y in range(2010, 2018)]
+        ind += [SimpleNamespace(country_code="AR", metric="inflation", year=y, date=None,
+                                value=float(10 + (y - 2010) * 2)) for y in range(2010, 2018)]
+        ind += [SimpleNamespace(country_code="AR", metric="gdp_growth", year=2019, date=None, value=99.0)]
+        store = {"Indicator": ind, "PoliticalEvent": [], "GovernanceIndicator": []}
+        out = panel.materialize_crisis_panel(_FakeSession(store))
+        assert ("AR", 2018) in out["scores"]
+        assert out["coverage"]["live"] == 1
+        assert 0.0 <= out["scores"][("AR", 2018)] <= 100.0
+
+    def test_gov_pop_asof_excludes_future(self):
+        from core.calibration.panel import _gov_pop_asof
+        gov = [
+            SimpleNamespace(country_code="AR", metric="wgi_rule_of_law", year=2015, value=-0.5),
+            SimpleNamespace(country_code="BR", metric="wgi_rule_of_law", year=2016, value=0.1),
+            SimpleNamespace(country_code="CL", metric="wgi_rule_of_law", year=2020, value=1.2),  # future
+        ]
+        db = _FakeSession({"GovernanceIndicator": gov})
+        pop = _gov_pop_asof(db, 2018, {})
+        vals = pop["wgi_rule_of_law"]
+        assert -0.5 in vals and 0.1 in vals
+        assert 1.2 not in vals  # 2020 value excluded for an as-of-2018 population

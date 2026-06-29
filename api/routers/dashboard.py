@@ -1673,6 +1673,27 @@ def _build_studio(latest: list) -> str:
     <div class="solve" id="solve"></div>
   </div>
 </div>
+<div class="lab-hd">Live backtest — validate against 2000–2023 crises</div>
+<div class="shockrow">
+  <div class="sgrp"><span class="gl">Score source</span>
+    <select class="focus-sel" id="btsrc">
+      <option value="heuristic">Heuristic bridge</option>
+      <option value="live">Live point-in-time panel (C7)</option></select></div>
+  <div class="sgrp"><span class="gl">Bootstrap</span>
+    <select class="focus-sel" id="btboot">
+      <option value="500">500</option><option value="1000" selected>1000</option>
+      <option value="2000">2000</option></select></div>
+  <div class="sgrp"><span class="gl">&nbsp;</span>
+    <button class="sbtn go" id="runbt">Run backtest &#9654;</button></div>
+  <div class="sgrp" style="flex:1;min-width:160px"><span class="gl">Status</span>
+    <span id="btstatus" style="font:11px Geneva,sans-serif;color:#555">idle</span></div>
+</div>
+<div class="vcard" style="border-right:none"><div id="btresults">
+  <div class="vsub">Runs the rigorous evaluation harness — bootstrap CIs, no-skill baselines,
+    walk-forward calibration, Brier decomposition — against the crisis dataset.
+    <b>Live</b> reconstructs point-in-time composites where the DB has coverage and reports
+    that coverage honestly.</div>
+</div></div>
 {_tabbar([("Browse","/"),("Dashboard","/dashboard"),("Compare","/compare"),("Map","/map"),("Studio",""),("Validation","/validation"),("API","/api"),("",""),("Exit","/")], active="Studio")}
 </div></div>
 <div class="toast" id="toast"></div>
@@ -2050,6 +2071,54 @@ _STUDIO_JS = r"""<script>(function(){
     });
   });
   if($("focus")) $("focus").addEventListener("change",function(){ var f=$("focus").value; drawTornado(f); inverseSolve(f); });
+
+  // live backtest (calls the evaluation harness endpoint)
+  function btKpi(label,val){
+    return '<div style="flex:1;min-width:88px;border:1px solid #000;padding:6px 8px;background:#fff">'
+      +'<div style="font-size:15px;font-weight:bold;font-family:monospace">'+val+'</div>'
+      +'<div style="font-size:8px;letter-spacing:.05em;color:#666;text-transform:uppercase">'+label+'</div></div>';
+  }
+  function fmtCI(o){
+    if(!o) return "—";
+    return (o.ci_low!=null) ? o.point.toFixed(3)+' ['+o.ci_low.toFixed(3)+', '+o.ci_high.toFixed(3)+']'
+                            : (o.point!=null?o.point.toFixed(3):"—");
+  }
+  function runBacktest(){
+    var src=$("btsrc").value, nb=$("btboot").value;
+    $("btstatus").textContent="running…"; $("runbt").disabled=true;
+    fetch("/calibration/evaluation?source="+src+"&n_boot="+nb)
+      .then(function(r){ return r.json(); })
+      .then(function(j){
+        $("runbt").disabled=false;
+        if(j.status==="error"){ $("btstatus").textContent="error: "+j.message; return; }
+        $("btstatus").textContent="done · "+(j.score_source||src);
+        var bd=j.brier_decomposition||{}, h='';
+        h+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">';
+        h+=btKpi("AUC", fmtCI(j.auc));
+        h+=btKpi("Avg precision", fmtCI(j.average_precision));
+        h+=btKpi("Base rate", (j.base_rate!=null?j.base_rate.toFixed(3):"—"));
+        h+=btKpi("Brier", (bd.brier!=null?bd.brier:"—"));
+        h+=btKpi("Skill", (bd.skill_score!=null?bd.skill_score:"—"));
+        h+='</div>';
+        if(j.baselines){
+          h+='<div class="corr-c"><b>vs no-skill:</b> random AUC '+j.baselines.random.point.toFixed(3)
+            +' · crisis-type prior '+j.baselines.crisis_type_prior.point.toFixed(3)+'</div>';
+        }
+        var t=j.temporal_cv;
+        if(t && t.available){
+          h+='<div class="corr-c" style="margin-top:4px"><b>Walk-forward OOS:</b> n='+t.n_oos
+            +' over '+t.n_folds+' folds · AUC '+fmtCI(t.oos_auc)+' · Brier '+t.oos_brier.brier+'</div>';
+        }
+        if(j.panel_coverage){
+          var c=j.panel_coverage;
+          h+='<div class="corr-c" style="margin-top:4px"><b>Panel coverage:</b> '+c.live+'/'+c.n_events
+            +' events scored live ('+Math.round(c.coverage_rate*100)+'%), '+c.insufficient+' heuristic fallback</div>';
+        }
+        $("btresults").innerHTML=h;
+      })
+      .catch(function(e){ $("runbt").disabled=false; $("btstatus").textContent="fetch failed: "+e; });
+  }
+  if($("runbt")) $("runbt").addEventListener("click", runBacktest);
 
   // source-family toggles
   Array.prototype.forEach.call(document.querySelectorAll(".srcck"),function(ck){
