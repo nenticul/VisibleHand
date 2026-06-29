@@ -119,7 +119,11 @@ def materialize_crisis_panel(db, weights: dict | None = None) -> dict:
         scores[(code, ev.year)] = round(float(comp), 1)
         live_events.append({"country": code, "year": ev.year,
                             "crisis_type": ev.crisis_type, "label": ev.label,
-                            "score": round(float(comp), 1)})
+                            "score": round(float(comp), 1),
+                            "economic": result.get("economic"),
+                            "political": result.get("political"),
+                            "nlp": result.get("nlp_sentiment"),
+                            "governance": result.get("governance")})
 
     n_events = len(ALL_EVENTS)
     coverage = {

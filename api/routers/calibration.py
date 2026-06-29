@@ -144,6 +144,27 @@ async def calibration_evaluation(
         return {"status": "error", "message": str(exc)}
 
 
+@router.get("/hazard-model")
+async def calibration_hazard_model(
+    l2: float = Query(1.0, ge=0.0, le=100.0, description="L2 shrinkage strength."),
+    monotone: bool = Query(True, description="Constrain every coefficient ≥ 0 (risk-increasing)."),
+    db: Session = Depends(get_db),
+) -> dict:
+    """
+    Discrete-time logistic hazard model (Shumway 2001) trained on the C7
+    point-in-time panel: P(crisis within 12 months) from the four sub-scores,
+    with monotonic (coefficient ≥ 0) constraints + L2. Returns the glass-box
+    coefficients, in-sample AUC/Brier, and honest training coverage. Does not
+    change the published composite — it's an opt-in early-warning probability.
+    """
+    try:
+        from core.calibration.hazard_model import train_from_panel
+        return train_from_panel(db, l2=l2, monotone=monotone)
+    except Exception as exc:
+        log.exception("calibration/hazard-model failed")
+        return {"status": "error", "message": str(exc)}
+
+
 @router.get("/panel")
 async def calibration_panel(db: Session = Depends(get_db)) -> dict:
     """

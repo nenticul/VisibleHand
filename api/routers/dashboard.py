@@ -2290,7 +2290,7 @@ def _ci_bar(point: float, lo, hi, label: str, ref: float = 0.5) -> str:
             f'<span class="mono" style="width:42px;text-align:right">{point:.3f}</span></div>')
 
 
-def _build_validation(bt, scores: list, ev=None) -> str:
+def _build_validation(bt, scores: list, ev=None, hz=None) -> str:
     roc = _svg_roc(bt.roc_curve, bt.auc)
     dist = _svg_histogram([s.composite for s in scores])
     kpis = [("ROC-AUC", f"{bt.auc:.2f}"), ("Brier", f"{bt.brier_score:.3f}"),
@@ -2369,6 +2369,46 @@ def _build_validation(bt, scores: list, ev=None) -> str:
 </div>
 <div class="note-i" style="padding:6px 12px 0"><b>Score source:</b> {ev.score_source}</div>"""
 
+    hz_section = ""
+    if hz is not None and hz.get("status") == "available":
+        cov = hz.get("coverage", {})
+        ranked = hz.get("feature_ranking", [])
+        mx = max((abs(r["coef_std"]) for r in ranked), default=1) or 1
+        bars = ""
+        for r in ranked:
+            w = int(max(0, min(1, abs(r["coef_std"]) / mx)) * 100)
+            bars += (f'<div style="display:flex;align-items:center;gap:8px;margin:3px 0;font-size:11px">'
+                     f'<span style="width:96px" class="mono">{r["feature"]}</span>'
+                     f'<span style="flex:1;height:11px;border:1px solid #000;background:#fff;position:relative">'
+                     f'<span style="position:absolute;left:0;top:0;bottom:0;width:{w}%;background:{_risk_color(70)}"></span></span>'
+                     f'<span class="mono" style="width:48px;text-align:right">{r["coef_std"]:.3f}</span></div>')
+        auc = hz.get("in_sample_auc", {})
+        hz_section = f"""
+<div class="vrow">
+  <div class="vcard">
+    <div class="vh2">Discrete-time hazard model — trained early-warning probability</div>
+    <div class="vsub">Monotone (coefficient &#8805; 0), L2-regularised logistic hazard on the C7
+      point-in-time panel: P(crisis within 12 months) from the four sub-scores.
+      Bars = standardised per-1-SD effect on the log-odds.</div>
+    {bars}
+    <div class="vsub" style="margin-top:8px">n_train <b>{hz.get('n_train')}</b> ·
+      class balance <b>{hz.get('class_balance')}</b> · in-sample AUC
+      <b>{auc.get('point')}</b> [{auc.get('ci_low')}, {auc.get('ci_high')}] ·
+      panel coverage {cov.get('live')}/{cov.get('n_events')}.</div>
+  </div>
+  <div class="vcard">
+    <div class="vh2">How to read it</div>
+    <div class="vsub">Coefficients are constrained non-negative so a worse sub-score can never
+      <i>lower</i> predicted crisis risk — a sign error that would wreck credibility. With a
+      small panel, the in-sample AUC overstates real skill; the walk-forward CV above is the
+      honest out-of-sample read. The default composite is unchanged — this is an opt-in
+      probability served at <span class="mono">/calibration/hazard-model</span>.</div>
+  </div>
+</div>"""
+    elif hz is not None:
+        hz_section = (f'<div class="note-i" style="padding:8px 12px"><b>Hazard model:</b> '
+                      f'{hz.get("note", "insufficient panel coverage to train yet.")}</div>')
+
     return _head("VisibleHand — Validation") + f"""
 <body>
 {_menubar(["File","Edit","View"])}
@@ -2381,6 +2421,7 @@ def _build_validation(bt, scores: list, ev=None) -> str:
 </div>
 <div style="display:flex;gap:8px;flex-wrap:wrap;padding:10px 12px;border-bottom:1px solid #000">{kpi_html}</div>
 {eval_section}
+{hz_section}
 <div class="vrow">
   <div class="vcard">
     <div class="vh2">ROC curve — does an elevated score precede a crisis?</div>
@@ -2609,8 +2650,13 @@ async def validation_page(db: Session = Depends(get_db)) -> HTMLResponse:
         ev = _cached_evaluation(2000)
     except Exception:
         ev = None
+    try:
+        from core.calibration.hazard_model import train_from_panel
+        hz = train_from_panel(db)
+    except Exception:
+        hz = None
     scores = _latest_scores(db)
-    return HTMLResponse(_build_validation(bt, scores, ev=ev))
+    return HTMLResponse(_build_validation(bt, scores, ev=ev, hz=hz))
 
 
 # â”€â”€ ASCII terminal: rotating 3D globe + ASCII charts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

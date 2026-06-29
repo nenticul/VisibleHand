@@ -320,3 +320,86 @@ class TestPanelMaterialisation:
         vals = pop["wgi_rule_of_law"]
         assert -0.5 in vals and 0.1 in vals
         assert 1.2 not in vals  # 2020 value excluded for an as-of-2018 population
+
+
+class TestHazardModel:
+    def _separable(self, n=120, seed=0):
+        import numpy as np
+        rng = np.random.default_rng(seed)
+        # high sub-scores -> crisis; build a clearly separable set
+        Xpos = rng.uniform(60, 95, size=(n // 2, 4))
+        Xneg = rng.uniform(5, 40, size=(n // 2, 4))
+        X = np.vstack([Xpos, Xneg])
+        y = np.array([1] * (n // 2) + [0] * (n // 2))
+        return X, y
+
+    def test_fits_and_discriminates(self):
+        from core.calibration.hazard_model import DiscreteTimeHazard
+        from core.calibration.evaluation import auc_score
+        X, y = self._separable()
+        m = DiscreteTimeHazard(l2=0.5).fit(X, y, features=["economic", "political", "nlp", "governance"])
+        proba = m.predict_proba(X)
+        assert auc_score(proba.tolist(), y.tolist()) > 0.95
+
+    def test_monotone_constraint_holds(self):
+        from core.calibration.hazard_model import DiscreteTimeHazard
+        import numpy as np
+        # adversarial: one feature is anti-correlated with the label
+        rng = np.random.default_rng(1)
+        X = rng.uniform(0, 100, size=(200, 4))
+        y = (X[:, 0] > 50).astype(int)
+        X[:, 1] = 100 - X[:, 0]  # feature 1 negatively related to y
+        m = DiscreteTimeHazard(l2=0.1, monotone=True).fit(X, y, features=["a", "b", "c", "d"])
+        assert all(c >= 0 for c in m.coefficients().values())  # no negative coefficients
+
+    def test_non_monotone_allows_negative(self):
+        from core.calibration.hazard_model import DiscreteTimeHazard
+        import numpy as np
+        rng = np.random.default_rng(2)
+        X = rng.uniform(0, 100, size=(200, 4))
+        y = (X[:, 0] > 50).astype(int)
+        X[:, 1] = 100 - X[:, 0]
+        m = DiscreteTimeHazard(l2=0.01, monotone=False).fit(X, y, features=["a", "b", "c", "d"])
+        assert min(m.coefficients().values()) < 0  # unconstrained can go negative
+
+    def test_train_from_panel_insufficient(self, monkeypatch):
+        import core.calibration.hazard_model as hm
+        monkeypatch.setattr(hm, "materialize_crisis_panel",
+                            lambda db: {"coverage": {"n_events": 99, "live": 2, "insufficient": 97,
+                                                     "coverage_rate": 0.02,
+                                                     "live_events": [
+                                                         {"label": 1, "economic": 80, "political": 70, "nlp": 60, "governance": 75},
+                                                         {"label": 0, "economic": 20, "political": 30, "nlp": 40, "governance": 25},
+                                                     ]}})
+        out = hm.train_from_panel(object())
+        assert out["status"] == "insufficient"
+        assert out["n_train"] == 2
+
+    def test_train_from_panel_available(self, monkeypatch):
+        import core.calibration.hazard_model as hm
+        live = []
+        for i in range(40):
+            crisis = i % 2 == 0
+            live.append({"label": 1 if crisis else 0,
+                         "economic": 80 if crisis else 25,
+                         "political": 70 if crisis else 20,
+                         "nlp": 60 if crisis else 45,
+                         "governance": 75 if crisis else 30})
+        monkeypatch.setattr(hm, "materialize_crisis_panel",
+                            lambda db: {"coverage": {"n_events": 99, "live": 40, "insufficient": 59,
+                                                     "coverage_rate": 0.40, "live_events": live}})
+        out = hm.train_from_panel(object(), n_boot=200)
+        assert out["status"] == "available"
+        assert out["n_train"] == 40
+        assert set(out["summary"]["coefficients_std"]) == {"economic", "political", "nlp", "governance"}
+        assert out["in_sample_auc"]["point"] > 0.9
+        # monotone default -> all coefficients non-negative
+        assert all(c >= 0 for c in out["summary"]["coefficients_std"].values())
+
+    def test_missing_subscore_imputed(self):
+        from core.calibration.hazard_model import _matrix_from_events, _NEUTRAL
+        X, y = _matrix_from_events([
+            {"label": 1, "economic": 80, "political": None, "nlp": None, "governance": 70},
+        ])
+        assert X[0][1] == _NEUTRAL and X[0][2] == _NEUTRAL  # missing political/nlp imputed neutral
+        assert X[0][0] == 80 and X[0][3] == 70
