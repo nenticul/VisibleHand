@@ -42,8 +42,9 @@ if _HAS_PYDANTIC_SETTINGS:
 
         # ── External data sources ─────────────────────────────────────────
         fred_api_key: str = ""
-        acled_api_key: str = ""
         acled_email: str = ""
+        acled_password: str = ""   # account password; generates 24-h OAuth2 tokens
+        acled_api_key: str = ""    # legacy static key — ignored when acled_password is set
 
         # ── Auth & rate limiting ──────────────────────────────────────────
         api_key: str = ""
@@ -86,8 +87,9 @@ else:  # minimal shim so the app still boots without pydantic-settings
             self.db_max_overflow = int(os.getenv("DB_MAX_OVERFLOW", "20"))
             self.db_pool_pre_ping = True
             self.fred_api_key = os.getenv("FRED_API_KEY", "")
-            self.acled_api_key = os.getenv("ACLED_API_KEY", "")
             self.acled_email = os.getenv("ACLED_EMAIL", "")
+            self.acled_password = os.getenv("ACLED_PASSWORD", "")
+            self.acled_api_key = os.getenv("ACLED_API_KEY", "")
             self.api_key = os.getenv("API_KEY", "")
             self.rate_limit = os.getenv("RATE_LIMIT", "120/minute")
             self.nlp_model = os.getenv("NLP_MODEL", "ProsusAI/finbert")
