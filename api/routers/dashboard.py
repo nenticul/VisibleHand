@@ -576,7 +576,7 @@ def _build_dashboard(rows: list, history_rows: list | None = None) -> str:
 
     _TABS = [
         ("Browse", "/"), ("Dashboard", "/dashboard"),
-        ("Compare", "/compare"), ("Map", "/map"),
+        ("Compare", "/compare"), ("Map", "/map"), ("Validation", "/validation"),
         ("API", "/api"), ("Methodology", "/methodology"),
         ("", ""), ("Exit", "/"),
     ]
@@ -1388,7 +1388,7 @@ def _build_compare(selected: list, latest: list) -> str:
     <tbody>{trows}</tbody>
   </table>
 </div>
-{_tabbar([("Browse","/"),("Dashboard","/dashboard"),("Compare",""),("Map","/map"),("World","/world"),("API","/api"),("",""),("Exit","/")], active="Compare")}
+{_tabbar([("Browse","/"),("Dashboard","/dashboard"),("Compare",""),("Map","/map"),("Validation","/validation"),("World","/world"),("API","/api"),("",""),("Exit","/")], active="Compare")}
 </div></div></body></html>"""
 
 
@@ -1425,7 +1425,123 @@ def _build_map(latest: list) -> str:
     {heat}
   </div>
 </div>
-{_tabbar([("Browse","/"),("Dashboard","/dashboard"),("Compare","/compare"),("Map",""),("World","/world"),("API","/api"),("",""),("Exit","/")], active="Map")}
+{_tabbar([("Browse","/"),("Dashboard","/dashboard"),("Compare","/compare"),("Map",""),("Validation","/validation"),("World","/world"),("API","/api"),("",""),("Exit","/")], active="Map")}
+</div></div></body></html>"""
+
+
+# ── Calibration / validation visuals (inline SVG, no JS libs) ────────────────
+
+def _svg_roc(roc_curve: list[dict], auc: float, w: int = 360, h: int = 360) -> str:
+    pad = 42
+    X = lambda v: pad + (w - 2 * pad) * v
+    Y = lambda v: (h - pad) - (h - 2 * pad) * v
+    out = (f'<rect x="{pad}" y="{pad}" width="{w-2*pad}" height="{h-2*pad}" '
+           f'fill="#fcfcfa" stroke="#ddd"/>')
+    out += (f'<line x1="{X(0):.1f}" y1="{Y(0):.1f}" x2="{X(1):.1f}" y2="{Y(1):.1f}" '
+            f'stroke="#bbb" stroke-dasharray="3 3"/>')
+    if roc_curve:
+        pts = " ".join(f"{X(p['fpr']):.1f},{Y(p['tpr']):.1f}" for p in roc_curve)
+        out += (f'<polyline points="{pts}" fill="none" stroke="#a8322f" stroke-width="1.8"/>')
+    for t in (0, 0.25, 0.5, 0.75, 1.0):
+        out += (f'<text x="{X(t):.1f}" y="{h-pad+14:.1f}" font-size="7.5" text-anchor="middle" '
+                f'font-family="monospace" fill="#999">{t:g}</text>'
+                f'<text x="{pad-6:.1f}" y="{Y(t)+3:.1f}" font-size="7.5" text-anchor="end" '
+                f'font-family="monospace" fill="#999">{t:g}</text>')
+    out += (f'<text x="{w/2:.1f}" y="{h-8:.1f}" font-size="9" text-anchor="middle" '
+            f'font-family="monospace" fill="#555">false positive rate &#8594;</text>'
+            f'<text x="12" y="{h/2:.1f}" font-size="9" text-anchor="middle" '
+            f'font-family="monospace" fill="#555" '
+            f'transform="rotate(-90 12 {h/2:.1f})">true positive rate &#8594;</text>'
+            f'<text x="{X(0.52):.1f}" y="{Y(0.22):.1f}" font-size="12" font-family="monospace" '
+            f'fill="#a8322f" font-weight="bold">AUC {auc:.2f}</text>')
+    return f'<svg viewBox="0 0 {w} {h}" width="100%" style="max-width:380px">{out}</svg>'
+
+
+def _svg_histogram(values: list[float], w: int = 560, h: int = 300, bins: int = 10) -> str:
+    pad_l, pad_b, pad_t, pad_r = 30, 30, 16, 10
+    plot_w = w - pad_l - pad_r
+    plot_h = h - pad_t - pad_b
+    counts = [0] * bins
+    for v in values:
+        idx = min(bins - 1, int(max(0, min(100, v)) / 100 * bins))
+        counts[idx] += 1
+    mx = max(counts) or 1
+    out = (f'<rect x="{pad_l}" y="{pad_t}" width="{plot_w}" height="{plot_h}" '
+           f'fill="#fcfcfa" stroke="#ddd"/>')
+    bw = plot_w / bins
+    for i, c in enumerate(counts):
+        bh = (c / mx) * plot_h
+        bx = pad_l + i * bw
+        by = pad_t + plot_h - bh
+        lo, hi = int(i * 100 / bins), int((i + 1) * 100 / bins)
+        out += (f'<rect x="{bx+1:.1f}" y="{by:.1f}" width="{bw-2:.1f}" height="{bh:.1f}" '
+                f'fill="{_risk_color((lo+hi)/2)}" stroke="#111" stroke-width="0.4">'
+                f'<title>{lo}-{hi}: {c}</title></rect>')
+        if c:
+            out += (f'<text x="{bx+bw/2:.1f}" y="{by-3:.1f}" font-size="8" text-anchor="middle" '
+                    f'font-family="monospace" fill="#444">{c}</text>')
+    for t in (0, 25, 50, 75, 100):
+        out += (f'<text x="{pad_l+(t/100)*plot_w:.1f}" y="{pad_t+plot_h+14:.1f}" font-size="7.5" '
+                f'text-anchor="middle" font-family="monospace" fill="#999">{t}</text>')
+    out += (f'<text x="{pad_l+plot_w/2:.1f}" y="{h-2:.1f}" font-size="8.5" text-anchor="middle" '
+            f'font-family="monospace" fill="#666">composite risk score &#8594;</text>')
+    return f'<svg viewBox="0 0 {w} {h}" width="100%">{out}</svg>'
+
+
+def _build_validation(bt, scores: list) -> str:
+    roc = _svg_roc(bt.roc_curve, bt.auc)
+    dist = _svg_histogram([s.composite for s in scores])
+    kpis = [("ROC-AUC", f"{bt.auc:.2f}"), ("Brier", f"{bt.brier_score:.3f}"),
+            ("PR-AUC", f"{bt.pr_auc:.2f}"), ("Events", str(bt.n_events)),
+            ("Crises", str(bt.n_crises))]
+    kpi_html = "".join(
+        f'<div style="flex:1;min-width:90px;border:1px solid #000;padding:8px 10px;background:#fff">'
+        f'<div style="font-size:20px;font-weight:bold;font-family:monospace">{v}</div>'
+        f'<div style="font-size:9px;letter-spacing:.08em;color:#666;text-transform:uppercase">{k}</div>'
+        f'</div>' for k, v in kpis)
+
+    bytype = ""
+    for ctype, auc in sorted(bt.by_crisis_type.items(), key=lambda kv: -kv[1]):
+        w = int(max(0, min(1, auc)) * 100)
+        bytype += (f'<div style="display:flex;align-items:center;gap:8px;margin:3px 0;font-size:11px">'
+                   f'<span style="width:120px" class="mono">{ctype.replace("_"," ")}</span>'
+                   f'<span style="flex:1;height:10px;border:1px solid #000;background:#fff;position:relative">'
+                   f'<span style="position:absolute;left:0;top:0;bottom:0;width:{w}%;background:{_risk_color(auc*100)}"></span></span>'
+                   f'<span class="mono" style="width:36px;text-align:right">{auc:.2f}</span></div>')
+
+    return _head("VisibleHand — Validation") + f"""
+<body>
+{_menubar(["File","Edit","View"])}
+<div class="desktop">
+<div class="window">
+{_titlebar("VisibleHand — Calibration & Validation", "/")}
+<div class="statbar">
+  <span><span class="ldot"></span>{bt.n_events} labelled events &#183; {bt.n_crises} crises</span>
+  <span style="color:#555">2000–2023 backtest</span>
+</div>
+<div style="display:flex;gap:8px;flex-wrap:wrap;padding:10px 12px;border-bottom:1px solid #000">{kpi_html}</div>
+<div class="vrow">
+  <div class="vcard">
+    <div class="vh2">ROC curve — does an elevated score precede a crisis?</div>
+    <div class="vsub">Threshold sweep over composite scores 12 months before each labelled
+      stress event. The diagonal is chance; bowed toward the top-left is skill.</div>
+    {roc}
+  </div>
+  <div class="vcard">
+    <div class="vh2">Live score distribution</div>
+    <div class="vsub">How today's {len(scores)} scored countries spread across the 0–100 scale.</div>
+    {dist}
+    <div class="vh2" style="margin-top:14px">AUC by crisis type</div>
+    {bytype or '<div class="vsub">Not enough labels per type.</div>'}
+  </div>
+</div>
+<div style="padding:10px 12px;border-top:1px solid #000;font-size:11px;color:#555;line-height:1.6">
+  <b>Honest note.</b> {bt.note} A heuristic stands in where live per-year DB scores
+  are unavailable, so AUC here is illustrative of the framework, not a published
+  result — the full historical study (Reinhart–Rogoff defaults, IMF restructurings,
+  UCDP conflicts) is the path to a citable figure. Methodology: <a href="/methodology">/methodology</a>.
+</div>
+{_tabbar([("Browse","/"),("Dashboard","/dashboard"),("Compare","/compare"),("Map","/map"),("Validation",""),("API","/api"),("",""),("Exit","/")], active="Validation")}
 </div></div></body></html>"""
 
 
@@ -1609,6 +1725,14 @@ async def map_page(db: Session = Depends(get_db)) -> HTMLResponse:
             '<div class="empty">No scores yet — seed the database first.</div>'
             '</div></div></body></html>', status_code=404)
     return HTMLResponse(_build_map(latest))
+
+
+@router.get("/validation", response_class=HTMLResponse, include_in_schema=False)
+async def validation_page(db: Session = Depends(get_db)) -> HTMLResponse:
+    from api.routers.calibration import _cached_backtest
+    bt = _cached_backtest()
+    scores = _latest_scores(db)
+    return HTMLResponse(_build_validation(bt, scores))
 
 
 # â”€â”€ ASCII terminal: rotating 3D globe + ASCII charts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -2327,6 +2451,7 @@ async def landing() -> HTMLResponse:
       <a class="mac-btn def" href="/dashboard">Live Dashboard</a>
       <a class="mac-btn" href="/compare">Compare</a>
       <a class="mac-btn" href="/map">Risk Map</a>
+      <a class="mac-btn" href="/validation">Validation</a>
       <a class="mac-btn" href="/world">World Map</a>
       <a class="mac-btn" href="/terminal">ASCII Terminal</a>
       <a class="mac-btn" href="/docs">API Docs</a>

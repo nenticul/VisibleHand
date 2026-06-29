@@ -423,10 +423,109 @@ async def get_bulk(
 
 # ── Parameterised routes ─────────────────────────────────────────────────────
 
+_STORY = {
+    "economic": "Macro-financial stress",
+    "political": "Political instability",
+    "nlp": "Central-bank / monetary stress",
+    "governance": "Governance & rule-of-law weakness",
+}
+
+
+def _humanize(s: str) -> str:
+    return s.replace("_", " ").strip()
+
+
+def _nlp_band(s: float) -> str:
+    if s < 35: return "dovish"
+    if s < 65: return "neutral"
+    if s < 85: return "hawkish"
+    return "very hawkish / stressed"
+
+
+def _top_detail(detail: dict | None, n: int = 3) -> list[tuple[str, float]]:
+    if not detail:
+        return []
+    items = [(k, v) for k, v in detail.items() if isinstance(v, (int, float))]
+    items.sort(key=lambda kv: -kv[1])
+    return items[:n]
+
+
+def _build_explanation(resp: RiskResponse) -> dict:
+    """
+    Assemble a structured 'why this score' tree from a finished response — no
+    re-computation, so it works off the cached score too. The dominant story is
+    the sub-scorer contributing the most risk; each component reports its single
+    biggest driver, and the NLP section carries the monetary-regime tag.
+    """
+    from core.scoring.regime import classify_nlp_regime
+
+    comps = resp.components or {}
+    bd = resp.breakdown
+    by = {"economic": bd.economic, "political": bd.political,
+          "nlp": bd.nlp_sentiment, "governance": bd.governance}
+
+    risk_attrs = [a for a in (resp.driver_attributions or []) if a.direction == "risk"]
+    dominant = None
+    if risk_attrs:
+        dominant = max(risk_attrs, key=lambda a: a.contribution).sub_scorer
+    if dominant not in _STORY:
+        present = {k: v for k, v in by.items() if v is not None}
+        dominant = max(present, key=present.get) if present else "economic"
+    story = _STORY.get(dominant, "Composite risk")
+
+    eco = comps.get("economic") or {}
+    eco_detail = eco.get("detail") or {}
+    pol = comps.get("political") or {}
+    pol_detail = pol.get("detail") or {}
+    nlp = comps.get("nlp") or {}
+    gov = comps.get("governance") or {}
+    gov_detail = gov.get("detail") or {}
+
+    out: dict = {
+        "dominant_story": story,
+        "risk_level": resp.risk_level,
+        "headline": (f"{resp.name} scores {resp.composite:.1f}/100 "
+                     f"({resp.risk_level}); dominant factor: {story.lower()}."),
+    }
+
+    if by["economic"] is not None:
+        top = _top_detail(eco_detail)
+        out["economic"] = {
+            "score": by["economic"],
+            "confidence": eco.get("confidence"),
+            "key_driver": _humanize(top[0][0]) if top else None,
+            "top_indicators": [{"indicator": _humanize(k), "risk": round(v, 1)} for k, v in top],
+        }
+    if by["political"] is not None:
+        esc = pol_detail.get("escalation")
+        out["political"] = {
+            "score": by["political"],
+            "confidence": pol.get("confidence"),
+            "escalating": bool(esc is not None and esc >= 60),
+            "detail": {k: round(v, 1) for k, v in pol_detail.items() if isinstance(v, (int, float))},
+        }
+    if by["nlp"] is not None:
+        out["nlp"] = {
+            "score": by["nlp"],
+            "confidence": nlp.get("confidence"),
+            "stance": _nlp_band(by["nlp"]),
+            "regime": classify_nlp_regime(by["nlp"], eco_detail),
+        }
+    if by["governance"] is not None:
+        top = _top_detail(gov_detail)
+        out["governance"] = {
+            "score": by["governance"],
+            "confidence": gov.get("confidence"),
+            "key_driver": _humanize(top[0][0]) if top else None,
+        }
+    return out
+
+
 @router.get("/{country_code}", response_model=RiskResponse)
 async def get_risk(
     country_code: str,
     mode: str = Query("temporal", description="'temporal' (vs own history) or 'cross_sectional' (vs peer + anchor baseline)"),
+    explain: bool = Query(False, description="Attach a structured why-this-score explanation tree"),
     economic_weight: float = Query(DEFAULT_WEIGHTS["economic"], ge=0, le=1),
     political_weight: float = Query(DEFAULT_WEIGHTS["political"], ge=0, le=1),
     nlp_weight: float = Query(DEFAULT_WEIGHTS["nlp"], ge=0, le=1),
@@ -437,7 +536,11 @@ async def get_risk(
     """Return composite political-economic risk score for a country."""
     if len(country_code) != 2 or not country_code.isalpha():
         raise HTTPException(status_code=422, detail="Provide a 2-letter ISO country code, e.g. BR")
-    return _build_response(country_code, db, economic_weight, political_weight, nlp_weight, governance_weight, mode)
+    resp = _build_response(country_code, db, economic_weight, political_weight, nlp_weight, governance_weight, mode)
+    if explain:
+        # model_copy so the cached instance is never mutated.
+        resp = resp.model_copy(update={"explanation": _build_explanation(resp)})
+    return resp
 
 
 @router.get("/{country_code}/history", response_model=list[HistoryPoint])

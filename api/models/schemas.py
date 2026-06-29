@@ -54,6 +54,11 @@ class RiskResponse(BaseModel):
     peer_percentiles: Optional[dict[str, float]] = Field(
         None, description="Per-indicator oriented peer percentile (0–100) in cross-sectional mode"
     )
+    explanation: Optional[dict[str, Any]] = Field(
+        None,
+        description="Structured why-this-score tree (only when ?explain=true): dominant "
+                    "story, per-component key driver, top indicators, and the monetary regime.",
+    )
     updated_at: str
 
     model_config = {"from_attributes": True}
