@@ -48,10 +48,22 @@ OTHER_INDICATORS: dict[str, str] = {
     "rsf_press":        "rsf_press_freedom",  # 0–100, higher = better
 }
 
+# World Bank WGI estimates (~-2.5 worst to +2.5 best). The first *live*
+# governance source — see core/ingestion/wgi.py.
+WGI_INDICATORS: dict[str, str] = {
+    "wgi_voice_accountability":  "wgi_voice_accountability",
+    "wgi_political_stability":   "wgi_political_stability",
+    "wgi_govt_effectiveness":    "wgi_govt_effectiveness",
+    "wgi_regulatory_quality":    "wgi_regulatory_quality",
+    "wgi_rule_of_law":           "wgi_rule_of_law",
+    "wgi_control_of_corruption": "wgi_control_of_corruption",
+}
+
 # Which indicators are "higher = better governance" (need inversion to risk)
 _HIGHER_IS_BETTER = {
     "v2x_corr", "v2x_rule", "v2xcs_ccsi", "v2x_jucon", "v2x_freexp_altinf",
     "wjp_rule_of_law", "ti_cpi", "rsf_press",
+    *WGI_INDICATORS,  # all six WGI estimates: higher = better
 }
 # Which are "higher = worse governance" (direct risk signal)
 _HIGHER_IS_WORSE = {"fh_political", "fh_civil"}
@@ -96,7 +108,7 @@ def governance_score(
     coverage = 0
     press_freedom_modifier = 1.0
 
-    all_metrics = {**VDEM_INDICATORS, **OTHER_INDICATORS}
+    all_metrics = {**VDEM_INDICATORS, **OTHER_INDICATORS, **WGI_INDICATORS}
 
     for metric, label in all_metrics.items():
         series = indicators.get(metric, [])

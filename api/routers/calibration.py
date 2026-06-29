@@ -41,9 +41,10 @@ async def calibration_summary() -> CalibrationSummary:
             "Economic (robust MAD/Theil-Sen normalisation, 10 indicators from "
             "World Bank WDI, IMF WEO, BIS, ILO, IMF FSI). Political (Hawkes "
             "process on GDELT/ACLED events, contagion network, ACLED taxonomy). "
-            "NLP (hybrid FinBERT ONNX + domain lexicon on central-bank statements, "
-            "with 5-aspect breakdowns). Governance (V-Dem, WJP, TI CPI, "
-            "Freedom House, cross-sectional normalisation). "
+            "with 5-aspect breakdowns). Governance (live World Bank WGI six "
+            "dimensions plus V-Dem, WJP, TI CPI, Freedom House, cross-sectional "
+            "normalisation). Sovereign bond spreads (FRED OECD 10Y vs US) and IMF "
+            "WEO projections are also ingested. "
             + auc_note
         ),
         methodology_version="0.3.0",

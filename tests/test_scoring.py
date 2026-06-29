@@ -224,6 +224,33 @@ class TestGovernanceScorer:
         assert 0 <= result.score <= 100
         assert 0 <= result.confidence <= 1
 
+    def test_wgi_metrics_consumed(self):
+        # The six WGI estimates (~-2.5..+2.5, higher = better) must be scored
+        # and inverted to risk like the other "higher is better" sources.
+        wgi = {
+            "wgi_rule_of_law": [1.8, 1.85, 1.9],
+            "wgi_control_of_corruption": [1.7, 1.75, 1.8],
+            "wgi_govt_effectiveness": [1.6, 1.65, 1.7],
+        }
+        result = governance_score(wgi)
+        assert "wgi_rule_of_law" in result.components
+        assert 0 <= result.score <= 100
+
+    def test_wgi_cross_sectional_discriminates(self):
+        # With a global population, a strong-governance country must score lower
+        # risk than a weak one — own-history alone would wash slow-moving WGI out.
+        population = {
+            "wgi_rule_of_law": [-1.5, -0.8, 0.0, 0.5, 1.0, 1.8],
+            "wgi_control_of_corruption": [-1.4, -0.7, 0.1, 0.6, 1.1, 1.7],
+        }
+        strong = {"wgi_rule_of_law": [1.8, 1.8, 1.8],
+                  "wgi_control_of_corruption": [1.7, 1.7, 1.7]}
+        weak = {"wgi_rule_of_law": [-1.5, -1.5, -1.5],
+                "wgi_control_of_corruption": [-1.4, -1.4, -1.4]}
+        r_strong = governance_score(strong, global_population=population)
+        r_weak = governance_score(weak, global_population=population)
+        assert r_weak.score > r_strong.score + 30
+
 
 # ── Composite V3 ─────────────────────────────────────────────────────────────
 

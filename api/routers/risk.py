@@ -104,6 +104,43 @@ def _get_baseline_reference(db: Session) -> BaselineReference:
     return ref
 
 
+# ── Governance cross-sectional population (built once, cached) ────────────────
+_gov_pop_cache: dict[str, object] = {"pop": None, "ts": 0.0}
+_GOV_POP_TTL = 300.0  # seconds
+
+
+def _get_governance_population(db: Session) -> dict[str, list[float]]:
+    """
+    {metric: [latest value per country]} across all countries, for cross-sectional
+    percentile ranking in the governance scorer. Governance is inherently
+    comparative (Sweden vs Somalia), so own-history z-scores wash out slow-moving
+    indicators like WGI — this population is what gives them signal.
+    """
+    import time
+    now = time.time()
+    pop = _gov_pop_cache.get("pop")
+    if pop is not None and (now - float(_gov_pop_cache.get("ts", 0.0))) < _GOV_POP_TTL:
+        return pop  # type: ignore[return-value]
+
+    rows = db.query(GovernanceIndicator).all()
+    best: dict[tuple, tuple] = {}  # (country, metric) -> (year, value)
+    for r in rows:
+        key = (r.country_code, r.metric)
+        ordkey = r.year or 0
+        cur = best.get(key)
+        if cur is None or ordkey > cur[0]:
+            best[key] = (ordkey, r.value)
+
+    population: dict[str, list[float]] = {}
+    for (_cc, metric), (_y, val) in best.items():
+        if val is not None:
+            population.setdefault(metric, []).append(val)
+
+    _gov_pop_cache["pop"] = population
+    _gov_pop_cache["ts"] = now
+    return population
+
+
 def _build_response(
     country_code: str,
     db: Session,
@@ -165,12 +202,14 @@ def _build_response(
     score_history = [r.composite for r in history_rows] if len(history_rows) >= 3 else None
 
     baseline_ref = _get_baseline_reference(db) if mode == "cross_sectional" else None
+    governance_population = _get_governance_population(db) if governance_indicators else None
 
     result = compute_composite(
         indicators=indicators,
         events=event_dicts,
         nlp_score=nlp_raw,
         governance_indicators=governance_indicators or None,
+        governance_population=governance_population,
         nlp_confidence=0.7 if stmt else 0.5,
         score_history=score_history,
         country=code,

@@ -56,6 +56,7 @@ async def run_all_ingestion() -> None:
     from core.ingestion.ilo import ingest_ilo
     from core.ingestion.bis import ingest_bis
     from core.ingestion.imf_fsi import ingest_imf_fsi
+    from core.ingestion.wgi import ingest_wgi
     from core.ingestion.gdelt import ingest_gdelt
     from core.ingestion.acled import ingest_acled
     from core.ingestion.centralbank import ingest_central_banks
@@ -67,6 +68,7 @@ async def run_all_ingestion() -> None:
         ("ilostat",     ingest_ilo()),
         ("bis",         ingest_bis()),
         ("imf_fsi",     ingest_imf_fsi()),
+        ("wgi",         ingest_wgi()),
         ("gdelt",       ingest_gdelt()),
         ("acled",       ingest_acled()),
         ("centralbank", ingest_central_banks()),
