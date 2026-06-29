@@ -1,5 +1,7 @@
 ﻿# VisibleHand
 
+<img width="1917" height="507" alt="image" src="https://github.com/user-attachments/assets/491ed206-f7b7-43d5-b4c6-5e84946073a7" />
+
 **Political-economic risk scoring for every country. Free. Programmable. Open.**
 
 ```bash
