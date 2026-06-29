@@ -1471,11 +1471,33 @@ _STUDIO_CSS = """
 .tbl-scroll{max-height:300px;overflow:auto;border:1px solid #000}
 .urlbox{font:10px "Cascadia Mono",Consolas,monospace;background:#f4f1e6;border:1px solid #999;
   padding:4px 6px;margin-top:6px;word-break:break-all;color:#333}
+.srcrow{display:flex;flex-wrap:wrap;gap:18px;padding:8px 12px;background:#efece0;
+  border-bottom:1px solid #000;align-items:flex-start}
+.srcgrp{display:flex;flex-direction:column;gap:3px}
+.srctog{font:11px Geneva,Verdana,sans-serif;cursor:pointer;user-select:none}
+.srctog.off{opacity:.4;text-decoration:line-through}
+.srcchips{display:flex;flex-wrap:wrap;gap:3px;max-width:230px}
+.srcchip{font:9px Geneva,Verdana,sans-serif;background:#fff;border:1px solid #b6b094;
+  padding:1px 5px;color:#555}
+.corr-c{font:9px Geneva,Verdana,sans-serif}
+.note-i{font:10px Geneva,Verdana,sans-serif;color:#666;padding:0 12px 8px}
 """
 
 _STUDIO_AXES = [("comp", "Composite (re-blended)"), ("c", "Composite (published)"),
                 ("e", "Economic"), ("p", "Political"), ("n", "NLP"),
                 ("g", "Governance"), ("conf", "Confidence")]
+
+
+# Which real data sources feed each sub-scorer (for the source-selection panel).
+# Toggling a family includes/excludes it from the live re-blend; the chips show
+# provenance at the source level (finer per-source recompute is the /studio live
+# endpoint path, B-tier).
+_STUDIO_SOURCES = [
+    ("e", "Economic", ["World Bank WDI", "IMF WEO", "BIS", "ILO", "IMF FSI", "FRED"]),
+    ("p", "Political", ["ACLED", "GDELT", "REIGN"]),
+    ("n", "NLP", ["Central-bank comms"]),
+    ("g", "Governance", ["WGI", "V-Dem", "WJP", "TI CPI", "Freedom House"]),
+]
 
 
 def _build_studio(latest: list) -> str:
@@ -1488,8 +1510,19 @@ def _build_studio(latest: list) -> str:
         "n": round(r.nlp_sentiment, 1) if r.nlp_sentiment is not None else None,
         "g": round(r.governance, 1) if r.governance is not None else None,
         "conf": round((r.confidence or 0), 3),
+        "cl": round(r.ci_low, 1) if getattr(r, "ci_low", None) is not None else None,
+        "ch": round(r.ci_high, 1) if getattr(r, "ci_high", None) is not None else None,
     } for r in latest]
     data_json = json.dumps(data)
+
+    src_html = ""
+    for key, label, srcs in _STUDIO_SOURCES:
+        chips = "".join(f'<span class="srcchip">{s}</span>' for s in srcs)
+        src_html += (
+            f'<div class="srcgrp"><label class="srctog">'
+            f'<input type="checkbox" class="srcck" data-fam="{key}" checked> '
+            f'<b>{label}</b></label><div class="srcchips">{chips}</div></div>'
+        )
 
     opts = "".join(f'<option value="{k}">{lbl}</option>' for k, lbl in _STUDIO_AXES)
     xopts = opts.replace('value="e"', 'value="e" selected')
@@ -1535,7 +1568,14 @@ def _build_studio(latest: list) -> str:
   <div class="sgrp"><span class="gl">Export</span>
     <span style="display:flex;gap:4px">
       <button class="sbtn go" id="csv">CSV</button>
+      <button class="sbtn" id="jsonx">JSON</button>
+      <button class="sbtn" id="pyx">Python</button>
       <button class="sbtn" id="apiurl">API weights</button></span></div>
+</div>
+<div class="srcrow">
+  <div class="sgrp" style="margin-right:6px"><span class="gl">Data sources</span>
+    <span style="font:10px Geneva,sans-serif;color:#555">toggle a family in/out of the blend</span></div>
+  {src_html}
 </div>
 <div class="vrow">
   <div class="vcard" style="flex:1.25">
@@ -1551,12 +1591,27 @@ def _build_studio(latest: list) -> str:
     <div class="urlbox" id="urlout">/risk/&lt;code&gt;?economic_weight=0.45&amp;political_weight=0.25&amp;nlp_weight=0.20&amp;governance_weight=0.10</div>
   </div>
 </div>
+<div class="vrow">
+  <div class="vcard">
+    <div class="vh2">Correlation matrix</div>
+    <div class="vsub">Pearson r across sub-scores &amp; confidence over the live cross-section.
+      Red = positive, blue = negative.</div>
+    <div id="corr"></div>
+  </div>
+  <div class="vcard" style="flex:1.25">
+    <div class="vh2">Scatter fit &amp; movers</div>
+    <div class="vsub">OLS fit on the scatter axes, plus the biggest re-blend movers vs the
+      published composite.</div>
+    <div id="stats" class="corr-c"></div>
+  </div>
+</div>
 <div class="vcard" style="border-right:none">
-  <div class="vh2">Ranked table <span style="font-weight:normal;color:#888;font-size:10px">— click a header to sort</span></div>
+  <div class="vh2">Ranked table <span style="font-weight:normal;color:#888;font-size:10px">— click a header to sort, CI from Monte-Carlo</span></div>
   <div class="tbl-scroll"><table class="stbl" id="tbl">
     <thead><tr>
       <th class="l" data-k="code">Country</th>
       <th data-k="comp">Composite</th>
+      <th data-k="ci">95% CI</th>
       <th data-k="delta">&#916; vs pub.</th>
       <th data-k="e">Econ</th><th data-k="p">Pol</th>
       <th data-k="n">NLP</th><th data-k="g">Gov</th>
@@ -1575,6 +1630,7 @@ def _build_studio(latest: list) -> str:
 _STUDIO_JS = r"""<script>(function(){
   var DATA = window.VH_DATA || [];
   var W = {e:45,p:25,n:20,g:10};
+  var ACTIVE = {e:true,p:true,n:true,g:true};
   var PAL = ["#5d7c4f","#8f9a45","#cf9f24","#c2702a","#a8322f"];
   var AXL = {comp:"Composite",c:"Composite (pub)",e:"Economic",p:"Political",n:"NLP",g:"Governance",conf:"Confidence"};
   var sortKey="comp", sortAsc=false;
@@ -1586,17 +1642,91 @@ _STUDIO_JS = r"""<script>(function(){
 
   function reblend(d){
     var num=0, den=0, m={e:d.e,p:d.p,n:d.n,g:d.g};
-    for(var k in m){ if(m[k]!=null){ num += W[k]*m[k]; den += W[k]; } }
-    return den>0 ? num/den : d.c;
+    for(var k in m){ if(ACTIVE[k] && m[k]!=null){ num += W[k]*m[k]; den += W[k]; } }
+    return den>0 ? num/den : null;
   }
   function axval(d,key){
     if(key==="comp") return d.comp;
     if(key==="conf") return d.conf==null?null:d.conf*100;
     return d[key];
   }
-  function norm(){ var t=W.e+W.p+W.n+W.g||1; return {e:W.e/t,p:W.p/t,n:W.n/t,g:W.g/t}; }
+  function norm(){
+    var t=0,o={e:0,p:0,n:0,g:0},k;
+    for(k in o){ if(ACTIVE[k]) t+=W[k]; } t=t||1;
+    for(k in o){ o[k]=ACTIVE[k]?W[k]/t:0; }
+    return o;
+  }
 
   function compute(){ return DATA.map(function(d){ var o={}; for(var k in d)o[k]=d[k]; o.comp=reblend(d); o.delta=(o.comp!=null&&d.c!=null)?(o.comp-d.c):null; return o; }); }
+
+  // ---- Stats helpers ----
+  function ols(pts){
+    var n=pts.length; if(n<3) return null;
+    var sx=0,sy=0,sxx=0,sxy=0;
+    pts.forEach(function(p){ sx+=p[0]; sy+=p[1]; sxx+=p[0]*p[0]; sxy+=p[0]*p[1]; });
+    var den=n*sxx-sx*sx; if(Math.abs(den)<1e-9) return null;
+    var b=(n*sxy-sx*sy)/den, a=(sy-b*sx)/n;
+    var my=sy/n, ssTot=0, ssRes=0;
+    pts.forEach(function(p){ var yh=a+b*p[0]; ssRes+=(p[1]-yh)*(p[1]-yh); ssTot+=(p[1]-my)*(p[1]-my); });
+    var r2=ssTot>0?1-ssRes/ssTot:0;
+    return {a:a,b:b,r2:r2,n:n};
+  }
+  function pearson(xs,ys){
+    var n=0,sx=0,sy=0,sxx=0,syy=0,sxy=0;
+    for(var i=0;i<xs.length;i++){ if(xs[i]==null||ys[i]==null)continue;
+      n++; sx+=xs[i]; sy+=ys[i]; sxx+=xs[i]*xs[i]; syy+=ys[i]*ys[i]; sxy+=xs[i]*ys[i]; }
+    if(n<3) return null;
+    var num=n*sxy-sx*sy, den=Math.sqrt((n*sxx-sx*sx)*(n*syy-sy*sy));
+    return den>0?num/den:null;
+  }
+  function corrColor(r){
+    if(r==null) return "#eee";
+    var a=Math.abs(r);
+    if(r>=0) return "rgba(168,50,47,"+(0.12+0.78*a).toFixed(2)+")";
+    return "rgba(47,80,120,"+(0.12+0.78*a).toFixed(2)+")";
+  }
+
+  // ---- Correlation matrix ----
+  function drawCorr(rows){
+    var keys=[["comp","Comp"],["e","Econ"],["p","Pol"],["n","NLP"],["g","Gov"],["conf","Conf"]];
+    var cols=keys.map(function(k){ return rows.map(function(d){ return axval(d,k[0]); }); });
+    var w=300,h=300,pad=42,cell=(w-pad)/keys.length;
+    var s='<svg viewBox="0 0 '+w+' '+h+'" width="100%" xmlns="http://www.w3.org/2000/svg" class="corr-c">';
+    for(var i=0;i<keys.length;i++){
+      for(var j=0;j<keys.length;j++){
+        var r=(i===j)?1:pearson(cols[i],cols[j]);
+        var x=pad+j*cell, y=pad+i*cell;
+        s+='<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+cell.toFixed(1)+'" height="'+cell.toFixed(1)+'" fill="'+corrColor(r)+'" stroke="#fff"/>';
+        s+='<text x="'+(x+cell/2).toFixed(1)+'" y="'+(y+cell/2+3).toFixed(1)+'" text-anchor="middle" fill="#222" font-size="9">'+(r==null?"—":r.toFixed(2))+'</text>';
+      }
+      s+='<text x="'+(pad-5)+'" y="'+(pad+i*cell+cell/2+3).toFixed(1)+'" text-anchor="end" fill="#444" font-size="9">'+keys[i][1]+'</text>';
+      s+='<text x="'+(pad+i*cell+cell/2).toFixed(1)+'" y="'+(pad-6)+'" text-anchor="middle" fill="#444" font-size="9">'+keys[i][1]+'</text>';
+    }
+    s+='</svg>'; $("corr").innerHTML=s;
+  }
+
+  // ---- Stats / movers readout ----
+  function drawStats(rows, fit){
+    var xk=$("xax").value, yk=$("yax").value;
+    var html='<div style="margin-bottom:8px"><b>OLS</b> '+AXL[yk]+' = ';
+    if(fit){ html+='<span class="mono">'+fit.a.toFixed(1)+' + '+fit.b.toFixed(3)+'&#183;'+AXL[xk]
+      +'</span> &#183; R&#178; <b>'+fit.r2.toFixed(3)+'</b> &#183; n='+fit.n; }
+    else { html+='<span style="color:#999">insufficient points</span>'; }
+    html+='</div>';
+    var moved=rows.filter(function(d){return d.delta!=null;})
+      .sort(function(a,b){return Math.abs(b.delta)-Math.abs(a.delta);}).slice(0,6);
+    html+='<div><b>Biggest movers</b> vs published composite</div><div style="margin-top:4px">';
+    moved.forEach(function(d){
+      var up=d.delta>=0, col=up?"#a8322f":"#1f5f3a";
+      html+='<div style="display:flex;gap:8px;align-items:center;margin:2px 0">'
+        +'<span class="mono" style="width:30px"><b>'+d.code+'</b></span>'
+        +'<span style="flex:1;height:9px;background:#fff;border:1px solid #000;position:relative">'
+        +'<span style="position:absolute;'+(up?"left:50%":"right:50%")+';top:0;bottom:0;width:'
+        +Math.min(50,Math.abs(d.delta)*2.2).toFixed(1)+'%;background:'+col+'"></span></span>'
+        +'<span class="mono" style="width:46px;text-align:right;color:'+col+'">'+(up?"+":"")+d.delta.toFixed(1)+'</span></div>';
+    });
+    html+='</div>'; $("stats").innerHTML=html;
+  }
 
   // ---- Scatter (inline SVG) ----
   function drawScatter(rows){
@@ -1614,12 +1744,25 @@ _STUDIO_JS = r"""<script>(function(){
     }
     s+='<text x="'+(w/2)+'" y="'+(h-8)+'" text-anchor="middle" fill="#333" font-weight="bold">'+AXL[xk]+'</text>';
     s+='<text x="14" y="'+(h/2)+'" text-anchor="middle" fill="#333" font-weight="bold" transform="rotate(-90 14 '+(h/2)+')">'+AXL[yk]+'</text>';
+    var pts=[];
     rows.forEach(function(d){
       var xv=axval(d,xk), yv=axval(d,yk); if(xv==null||yv==null)return;
+      pts.push([xv,yv]);
       var r=5+(d.comp||0)/100*7;
       s+='<circle cx="'+X(xv).toFixed(1)+'" cy="'+Y(yv).toFixed(1)+'" r="'+r.toFixed(1)+'" fill="'+color(d.comp)+'" fill-opacity="0.78" stroke="#000" stroke-width="0.6" data-c="'+d.code+'" data-x="'+xv.toFixed(1)+'" data-y="'+yv.toFixed(1)+'" data-comp="'+fmt(d.comp)+'"/>';
       s+='<text x="'+X(xv).toFixed(1)+'" y="'+(Y(yv)-r-2).toFixed(1)+'" text-anchor="middle" fill="#222" font-size="8">'+d.code+'</text>';
     });
+    var fit=ols(pts);
+    if(fit){
+      // clip the regression segment to the [0,100] y-range, preserving slope
+      var x1=0,x2=100,y1=fit.a+fit.b*x1,y2=fit.a+fit.b*x2;
+      if(Math.abs(fit.b)>1e-9){
+        if(y1<0){x1=(0-fit.a)/fit.b;y1=0;} if(y1>100){x1=(100-fit.a)/fit.b;y1=100;}
+        if(y2<0){x2=(0-fit.a)/fit.b;y2=0;} if(y2>100){x2=(100-fit.a)/fit.b;y2=100;}
+      }
+      x1=Math.max(0,Math.min(100,x1)); x2=Math.max(0,Math.min(100,x2));
+      s+='<line x1="'+X(x1).toFixed(1)+'" y1="'+Y(y1).toFixed(1)+'" x2="'+X(x2).toFixed(1)+'" y2="'+Y(y2).toFixed(1)+'" stroke="#1f5f3a" stroke-width="1.6" stroke-dasharray="5 3"/>';
+    }
     s+='</svg>';
     $("scatter").innerHTML=s;
     var tip=$("scTip"), box=$("scatter");
@@ -1632,6 +1775,7 @@ _STUDIO_JS = r"""<script>(function(){
       });
       c.addEventListener("mouseleave",function(){tip.style.display="none";});
     });
+    return fit;
   }
 
   // ---- Histogram ----
@@ -1669,8 +1813,10 @@ _STUDIO_JS = r"""<script>(function(){
     view.forEach(function(d){
       var dc=d.delta==null?"":(d.delta>=0?"up":"dn");
       var ds=d.delta==null?"—":((d.delta>=0?"+":"")+d.delta.toFixed(1));
+      var ci=(d.cl==null||d.ch==null)?"—":(d.cl.toFixed(0)+"–"+d.ch.toFixed(0));
       html+='<tr><td class="l"><b>'+d.code+'</b> <span style="color:#888">'+d.name+'</span></td>'
         +'<td style="color:'+color(d.comp)+';font-weight:bold">'+fmt(d.comp)+'</td>'
+        +'<td class="mono" style="font-size:10px;color:#777">'+ci+'</td>'
         +'<td class="'+dc+'">'+ds+'</td>'
         +'<td>'+fmt(d.e)+'</td><td>'+fmt(d.p)+'</td><td>'+fmt(d.n)+'</td><td>'+fmt(d.g)+'</td>'
         +'<td>'+(d.conf==null?"—":(d.conf*100).toFixed(0)+"%")+'</td></tr>';
@@ -1690,7 +1836,8 @@ _STUDIO_JS = r"""<script>(function(){
 
   function render(){
     var rows=compute();
-    drawScatter(rows); drawHist(rows); drawTable(rows);
+    var fit=drawScatter(rows); drawHist(rows); drawCorr(rows); drawTable(rows);
+    drawStats(rows, fit);
     $("urlout").textContent=apiURL();
   }
 
@@ -1737,6 +1884,59 @@ _STUDIO_JS = r"""<script>(function(){
     var url=apiURL();
     if(navigator.clipboard){ navigator.clipboard.writeText(url).then(function(){toast("API weights copied");},function(){toast(url);}); }
     else { toast(url); }
+  });
+
+  // source-family toggles
+  Array.prototype.forEach.call(document.querySelectorAll(".srcck"),function(ck){
+    ck.addEventListener("change",function(){
+      ACTIVE[ck.getAttribute("data-fam")]=ck.checked;
+      var lab=ck.closest(".srctog"); if(lab){ lab.className="srctog"+(ck.checked?"":" off"); }
+      render();
+    });
+  });
+
+  function download(name,text,mime){
+    var blob=new Blob([text],{type:mime||"text/plain"});
+    var a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+    a.download=name; document.body.appendChild(a); a.click(); a.remove();
+  }
+  $("jsonx").addEventListener("click",function(){
+    var rows=compute().filter(passFilter).map(function(d){
+      return {code:d.code,name:d.name,composite_reblended:d.comp,composite_published:d.c,
+        delta:d.delta,economic:d.e,political:d.p,nlp:d.n,governance:d.g,
+        confidence:d.conf,ci_low:d.cl,ci_high:d.ch};
+    });
+    var payload={weights:norm(),active_sources:ACTIVE,generated:new Date().toISOString(),rows:rows};
+    download("visiblehand_studio.json",JSON.stringify(payload,null,2),"application/json");
+    toast("Exported "+rows.length+" rows (JSON)");
+  });
+  $("pyx").addEventListener("click",function(){
+    var n=norm();
+    var codes=compute().filter(passFilter).map(function(d){return d.code;});
+    var py=[
+      "import requests",
+      "",
+      "# Auto-generated by VisibleHand Data Studio",
+      "BASE = \"https://api.visiblehand.xyz\"",
+      "WEIGHTS = {",
+      "    \"economic_weight\": "+n.e.toFixed(3)+",",
+      "    \"political_weight\": "+n.p.toFixed(3)+",",
+      "    \"nlp_weight\": "+n.n.toFixed(3)+",",
+      "    \"governance_weight\": "+n.g.toFixed(3)+",",
+      "}",
+      "CODES = "+JSON.stringify(codes),
+      "",
+      "rows = []",
+      "for code in CODES:",
+      "    r = requests.get(f\"{BASE}/risk/{code}\", params=WEIGHTS, timeout=30)",
+      "    r.raise_for_status()",
+      "    rows.append(r.json())",
+      "",
+      "for row in sorted(rows, key=lambda x: -x[\"composite\"]):",
+      "    print(f'{row[\"country_code\"]:<4} {row[\"composite\"]:6.1f}')"
+    ].join("\n");
+    download("visiblehand_query.py",py,"text/x-python");
+    toast("Python snippet exported");
   });
 
   render();
